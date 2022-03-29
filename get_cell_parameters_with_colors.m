@@ -4,7 +4,6 @@ clc;
 
 scale = 0.65; % 1/3.0769; % conversion µm/pixel
 
-
 %% load image, binarize it and invert it
 
 j=1; % number corresponding to the image
@@ -22,7 +21,7 @@ RGB_label = label2rgb(labeled, @spring, 'c', 'shuffle');
 % figure;
 % imshow(RGB_label);
 % title('connected components');
-% 
+ 
 %% erase cells at the borders 
 dilatedLabel = imclearborder(I);
 % figure, imshow(dilatedLabel);
@@ -31,11 +30,10 @@ CC = bwconncomp(dilatedLabel);
 labeled = labelmatrix(CC);
 RGB_label = label2rgb(labeled, @spring, 'c', 'shuffle');
 % figure, imshow(RGB_label);
-% % title('connected components');
+% title('connected components');
 
 
 %% erase small components 
-
 data = regionprops(CC,'Area');
 
 Max_size = max([data.Area]);
@@ -52,8 +50,6 @@ CC = bwconncomp(K);
 % subplot(1,2,2);
 % imshow(K);
 % title('filtered binary image');
-
-
 
 %% extract area and perimeter of cells
 
