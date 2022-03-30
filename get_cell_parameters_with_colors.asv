@@ -1,6 +1,7 @@
 close all;
 clear all; 
 clc;
+warning('off');
 
 scale = 0.65; % 1/3.0769; % conversion µm/pixel
 
@@ -97,7 +98,7 @@ L = zeros(CC.ImageSize); %preallocate
 
 %% Find edges and adjacency matrix
 
-se = offsetstrel('ball',3,3);
+se = strel('disk',4);
 dilateLabel = imdilate(labeled,se);
 LBL = imLabelEdges(dilateLabel);
 % Show them
@@ -108,20 +109,33 @@ LBLrgb = label2rgb(LBL,cmap2); %build rgb image
 % title('Edges');
 
 figure
-tiledlayout flow
-% imshow(K);
-% hold on
+% tiledlayout flow
+imshow(K);
+hold on
 
 adjacencyMatrix = zeros(max(max(dilateLabel)));
 N = double(max(dilateLabel(:)));
-se = strel('diamond', 2);
+% se = strel('diamond', 2);
 for c=1:N
-    lbl = intersect(1:N, unique(immultiply(dilateLabel, imdilate(dilateLabel==c, se))));
-    lbl = lbl(lbl~=c);
+    %lbl = unique(immultiply(dilateLabel, imdilate(dilateLabel==c, se)));
+    lbl = immultiply(dilateLabel, imdilate(dilateLabel==c, se));
+    lbl = lbl(lbl~=0);
+    c
+    [GC,lbl] = groupcounts(lbl)
+    lbl = lbl(GC>20);
     adjacencyMatrix(c,lbl) = 1;
 end
 
-g = graph(adjacencyMatrix);
+tadjmat = adjacencyMatrix';
+difadjmat = abs(adjacencyMatrix - tadjmat);
+g = graph(adjacencyMatrix,'omitselfloops');
+
+% remove
+xydata = vertcat(data.Centroid);
+xdata = xydata(:,1);
+ydata = xydata(:,2);
+plot(g,'XData',xdata,'YData',ydata) 
+% remove
 
 maxcycle = 6;
 mincycle = 6;
@@ -136,32 +150,33 @@ complex_pol_index = @(cycle_xy) polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle
 complex_pol_indices = cellfun(complex_pol_index,xycycle_cell);
 cycles = cycles(complex_pol_indices == 1);
 edgecycles = edgecycles(complex_pol_indices == 1);
+xycycle_cell = xycycle_cell(complex_pol_indices == 1);
+
 % sortedcycles
+clockwise_index = @(cycle_xy) ispolycw(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)]));
+clockwise_indices = cellfun(clockwise_index,xycycle_cell);
+ccw_cycle = @(cycle, cycle_xy) [cycle*clockwise_index(cycle_xy) + flip(cycle)*(1-clockwise_index(cycle_xy))];
+ccw_cycles = cellfun(ccw_cycle,cycles,xycycle_cell,'UniformOutput',false);
+ccw_edgecycles = cellfun(ccw_cycle,edgecycles,xycycle_cell,'UniformOutput',false);
 
 topo_wrapper = @(cell_cycle) topological_charge(cell_cycle, data);
 
-topologicalCharges = cellfun(topo_wrapper,cycles);
+topologicalCharges = cellfun(topo_wrapper,ccw_cycles);
 plusOneDefs = find(topologicalCharges==0.5);
-
-% remove
-xydata = vertcat(data.Centroid);
-xdata = xydata(:,1);
-ydata = xydata(:,2);
-% remove
 
 cmap3 = parula(length(plusOneDefs));
 cmap3 = cmap3(randperm(size(cmap3, 1)), :);
-for i = 785:785 %1:length(plusOneDefs)
+for i = 1:1 %ceil(length(plusOneDefs)/10):length(plusOneDefs)
     nexttile
     imshow(K)
     hold on
-    highlight(plot(g,'XData',xdata,'YData',ydata),'Edges',edgecycles{i},'EdgeColor',cmap3(1,:),'LineWidth',1.5,'NodeColor',cmap3(1,:),'MarkerSize',6)
+    highlight(plot(g,'XData',xdata,'YData',ydata),'Edges',ccw_edgecycles{plusOneDefs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
     title("Defect " + i)
     labels = {'1','2','3','4','5','6'};
-    plot(xdata(cycles{i}),ydata(cycles{i}),'Marker','.','MarkerSize',6,'MarkerFaceColor','r')
-    text(xdata(cycles{i}),ydata(cycles{i}),labels,'VerticalAlignment','bottom','HorizontalAlignment','right')
-    xmean = mean(xdata(cycles{i}));
-    ymean = mean(ydata(cycles{i}));
+    plot(xdata(ccw_cycles{plusOneDefs(i)}),ydata(ccw_cycles{plusOneDefs(i)}),'Marker','.','MarkerSize',6,'MarkerFaceColor','r')
+    text(xdata(ccw_cycles{plusOneDefs(i)}),ydata(ccw_cycles{plusOneDefs(i)}),labels,'VerticalAlignment','bottom','HorizontalAlignment','right')
+    xmean = mean(xdata(ccw_cycles{plusOneDefs(i)}));
+    ymean = mean(ydata(ccw_cycles{plusOneDefs(i)}));
     plot(xmean,ymean,'Marker','*','MarkerSize',6,'MarkerFaceColor','r')
 end
 
