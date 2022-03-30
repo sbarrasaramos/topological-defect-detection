@@ -2,7 +2,7 @@ close all;
 clear all; 
 clc;
 
-scale = 0.65; % 1/3.0769; % conversion µm/pixel
+scale = 0.65; % 1/3.0769; % conversion Âµm/pixel
 
 %% load image, binarize it and invert it
 
@@ -65,10 +65,10 @@ data = regionprops(CC,{...
 table = struct2table(data); % convert structure into table
 
 % converting data
-cell_size = [data.Area].*(scale^2);  % conversion en µm²
-cell_perimeter = [data.Perimeter].*scale; % conversion en µm
-major_axis_length = [data.MajorAxisLength].*scale; % conversion en µm
-minor_axis_length = [data.MinorAxisLength].*scale; % conversion en µm
+cell_size = [data.Area].*(scale^2);  % conversion en ÂµmÂ²
+cell_perimeter = [data.Perimeter].*scale; % conversion en Âµm
+major_axis_length = [data.MajorAxisLength].*scale; % conversion en Âµm
+minor_axis_length = [data.MinorAxisLength].*scale; % conversion en Âµm
 
 
 % data are transposed to be put in the columns of table
@@ -93,7 +93,7 @@ L = zeros(CC.ImageSize); %preallocate
 % % imwrite(Lrgb, [ '00' num2str(j) '-cell-colors.bmp']);
 % caxis([0, 90])
 % colorbar;
-% title('Cell orientation (°)');
+% title('Cell orientation (Â°)');
 
 %% Find edges and adjacency matrix
 
@@ -136,8 +136,8 @@ complex_pol_index = @(cycle_xy) polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle
 complex_pol_indices = cellfun(complex_pol_index,xycycle_cell);
 cycles = cycles(complex_pol_indices == 1);
 edgecycles = edgecycles(complex_pol_indices == 1);
-
 % sortedcycles
+
 topo_wrapper = @(cell_cycle) topological_charge(cell_cycle, data);
 
 topologicalCharges = cellfun(topo_wrapper,cycles);
