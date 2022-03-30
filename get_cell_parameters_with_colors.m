@@ -109,9 +109,9 @@ LBLrgb = label2rgb(LBL,cmap2); %build rgb image
 % title('Edges');
 
 figure
-% tiledlayout flow
-imshow(K);
-hold on
+tiledlayout flow
+% imshow(K);
+% hold on
 
 adjacencyMatrix = zeros(max(max(dilateLabel)));
 N = double(max(dilateLabel(:)));
@@ -127,15 +127,15 @@ adjacencyMatrix = adjacencyMatrix | adjacencyMatrix';
 
 g = graph(adjacencyMatrix,'omitselfloops');
 
-% % remove
-% xydata = vertcat(data.Centroid);
-% xdata = xydata(:,1);
-% ydata = xydata(:,2);
+% remove
+xydata = vertcat(data.Centroid);
+xdata = xydata(:,1);
+ydata = xydata(:,2);
 % plot(g,'XData',xdata,'YData',ydata) 
-% % remove
+% remove
 
-maxcycle = 8;
-mincycle = 8;
+maxcycle = 10;
+mincycle = 10;
 [cycles,edgecycles] = allcycles(g,'MaxCycleLength',maxcycle,'MinCycleLength',mincycle);
 
 xydata_cell = {data.Centroid}';
@@ -156,25 +156,52 @@ ccw_cycle = @(cycle, cycle_xy) [cycle*clockwise_index(cycle_xy) + flip(cycle)*(1
 ccw_cycles = cellfun(ccw_cycle,cycles,xycycle_cell,'UniformOutput',false);
 ccw_edgecycles = cellfun(ccw_cycle,edgecycles,xycycle_cell,'UniformOutput',false);
 
+% solidity filter
+solidity = @(cycle_xy)...
+    polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).area /...
+    polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).convhull.area;
+solidities = cellfun(solidity,xycycle_cell);
+solid_ccw_cycles = ccw_cycles(solidities > 0.9);
+solid_ccw_edgecycles = ccw_edgecycles(solidities > 0.9);
+
 topo_wrapper = @(cell_cycle) topological_charge(cell_cycle, data);
 
-topologicalCharges = cellfun(topo_wrapper,ccw_cycles);
+topologicalCharges = cellfun(topo_wrapper,solid_ccw_cycles);
 plusOneDefs = find(topologicalCharges==1);
 
 cmap3 = parula(length(plusOneDefs));
 cmap3 = cmap3(randperm(size(cmap3, 1)), :);
-for i = 1:ceil(length(plusOneDefs)/9):length(plusOneDefs)
-    nexttile
+nexttile
+for i = 1:4:length(plusOneDefs) % 1:ceil(length(plusOneDefs)/9):length(plusOneDefs)
+%     nexttile
     imshow(K)
     hold on
-    highlight(plot(g,'XData',xdata,'YData',ydata),'Edges',ccw_edgecycles{plusOneDefs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
-    title("Defect " + i)
-    labels = {'1','2','3','4','5','6','7','8'};
-    plot(xdata(ccw_cycles{plusOneDefs(i)}),ydata(ccw_cycles{plusOneDefs(i)}),'Marker','.','MarkerSize',6,'MarkerFaceColor','r')
-    text(xdata(ccw_cycles{plusOneDefs(i)}),ydata(ccw_cycles{plusOneDefs(i)}),labels,'VerticalAlignment','bottom','HorizontalAlignment','right')
-    xmean = mean(xdata(ccw_cycles{plusOneDefs(i)}));
-    ymean = mean(ydata(ccw_cycles{plusOneDefs(i)}));
-    plot(xmean,ymean,'Marker','*','MarkerSize',6,'MarkerFaceColor','r')
+    highlight(plot(g,'XData',xdata,'YData',ydata),'Edges',solid_ccw_edgecycles{plusOneDefs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
+%     title("Defect " + i)
+%     labels = {'1','2','3','4','5','6','7','8'};
+%     plot(xdata(solid_ccw_cycles{plusOneDefs(i)}),ydata(solid_ccw_cycles{plusOneDefs(i)}),'Marker','.','MarkerSize',6,'MarkerFaceColor','r')
+%     text(xdata(solid_ccw_cycles{plusOneDefs(i)}),ydata(solid_ccw_cycles{plusOneDefs(i)}),labels,'VerticalAlignment','bottom','HorizontalAlignment','right')
+%     xmean = mean(xdata(solid_ccw_cycles{plusOneDefs(i)}));
+%     ymean = mean(ydata(solid_ccw_cycles{plusOneDefs(i)}));
+%     plot(xmean,ymean,'Marker','*','MarkerSize',6,'MarkerFaceColor','r')
+end
+nexttile
+for i = 2:4:length(plusOneDefs) 
+    imshow(K)
+    hold on
+    highlight(plot(g,'XData',xdata,'YData',ydata),'Edges',solid_ccw_edgecycles{plusOneDefs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
+end
+nexttile
+for i = 3:4:length(plusOneDefs) 
+    imshow(K)
+    hold on
+    highlight(plot(g,'XData',xdata,'YData',ydata),'Edges',solid_ccw_edgecycles{plusOneDefs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
+end
+nexttile
+for i = 4:4:length(plusOneDefs) 
+    imshow(K)
+    hold on
+    highlight(plot(g,'XData',xdata,'YData',ydata),'Edges',solid_ccw_edgecycles{plusOneDefs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
 end
 
 function topoCharge = topological_charge(cycle, data_struct)
