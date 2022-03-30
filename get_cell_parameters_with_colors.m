@@ -127,16 +127,29 @@ xdata = xydata(:,1);
 ydata = xydata(:,2);
 %  p = plot(g,'XData',xdata,'YData',ydata);
 
-[cycles,edgecycles] = allcycles(g,'MaxCycleLength',6,'MinCycleLength',6);
+maxcycle = 6;
+mincycle = 6;
+[cycles,edgecycles] = allcycles(g,'MaxCycleLength',maxcycle,'MinCycleLength',mincycle);
+
+xcycles = xdata(cell2mat(cycles));
+ycycles = ydata(cell2mat(cycles));
+orientcycles = atan2(xcycles(:,2:end)-xcycles(:,1),ycycles(:,2:end)-ycycles(:,1)) + pi;
+monotonic = prod(diff(orientcycles,1,2)>0,2) - prod(diff(orientcycles,1,2)<0,2);
+
+[sortedorient,sortedindex] = sort(orientcycles,2);
+sortedindex = horzcat(ones(size(sortedindex,1),1), sortedindex+1) + maxcycle*[0:size(sortedindex,1)-1]';
+cyclesmat = cell2mat(cycles)';
+sortedcyclesmat = cyclesmat(sortedindex);
+sortedcycles = mat2cell(sortedcyclesmat,ones(size(cyclesmat(sortedindex),1),1),maxcycle);
 
 topo_wrapper = @(cell_cycle) topological_charge(cell_cycle, data);
 
-topologicalCharges = cellfun(topo_wrapper,cycles);
+topologicalCharges = cellfun(topo_wrapper,sortedcycles);
 plusOneDefs = find(topologicalCharges==0.5);
 
 cmap3 = parula(length(plusOneDefs));
 cmap3 = cmap3(randperm(size(cmap3, 1)), :);
-for i = 181:182 %1:length(plusOneDefs)
+for i = 1:length(plusOneDefs)
     nexttile
     imshow(K)
     hold on
