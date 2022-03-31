@@ -148,7 +148,7 @@ xycycle_cell = xycycle_cell(complex_pol_indices == 1);
 % sortedcycles
 clockwise_index = @(cycle_xy) ispolycw(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)]));
 clockwise_indices = cellfun(clockwise_index,xycycle_cell);
-ccw_cycle = @(cycle, cycle_xy) [cycle*clockwise_index(cycle_xy) + flip(cycle)*(1-clockwise_index(cycle_xy))];
+ccw_cycle = @(cycle, cycle_xy) [flip(cycle)*clockwise_index(cycle_xy) + cycle*(1-clockwise_index(cycle_xy))];
 ccw_cycles = cellfun(ccw_cycle,cycles,xycycle_cell,'UniformOutput',false);
 ccw_edgecycles = cellfun(ccw_cycle,edgecycles,xycycle_cell,'UniformOutput',false);
 
