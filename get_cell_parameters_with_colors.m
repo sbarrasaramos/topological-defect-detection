@@ -3,7 +3,7 @@ clear all;
 clc;
 warning('off');
 
-scale = 0.65; % 1/3.0769; % conversion µm/pixel
+scale = 0.65; % 1/3.0769; % conversion Âµm/pixel
 
 %% load image, binarize it and invert it
 
@@ -66,10 +66,10 @@ data = regionprops(CC,{...
 table = struct2table(data); % convert structure into table
 
 % converting data
-cell_size = [data.Area].*(scale^2);  % conversion en µm²
-cell_perimeter = [data.Perimeter].*scale; % conversion en µm
-major_axis_length = [data.MajorAxisLength].*scale; % conversion en µm
-minor_axis_length = [data.MinorAxisLength].*scale; % conversion en µm
+cell_size = [data.Area].*(scale^2);  % conversion en ÂµmÂ²
+cell_perimeter = [data.Perimeter].*scale; % conversion en Âµm
+major_axis_length = [data.MajorAxisLength].*scale; % conversion en Âµm
+minor_axis_length = [data.MinorAxisLength].*scale; % conversion en Âµm
 
 
 % data are transposed to be put in the columns of table
@@ -94,7 +94,7 @@ L = zeros(CC.ImageSize); %preallocate
 % % imwrite(Lrgb, [ '00' num2str(j) '-cell-colors.bmp']);
 % caxis([0, 90])
 % colorbar;
-% title('Cell orientation (°)');
+% title('Cell orientation (Â°)');
 
 %% Find edges and adjacency matrix
 
@@ -197,5 +197,118 @@ for i = 1:length(plusOneDefs)
 %     ymean = mean(ydata(solid_ccw_cycles{plusOneDefs(i)}));
 %     plot(xmean,ymean,'Marker','*','MarkerSize',6,'MarkerFaceColor','r')
 end
-plot(g,'XData',xdata,'YData',ydata,'EdgeColor','#0072BD','NodeColor','#0072BD')
 
+%% ellipse visualization thanks to its parametric equation superimposed to original image
+figure;
+imshow(K);
+
+t = linspace(0,2*pi,50);
+hold on
+for k = 1:length(data)
+    a = data (k).MajorAxisLength/2;
+    b = data (k).MinorAxisLength/2;
+    Xc = data (k).Centroid(1);
+    Yc = data (k).Centroid(2);
+    phi = deg2rad(-data(k).Orientation);
+    x = Xc + a*cos(t)*cos(phi) - b*sin(t)*sin(phi);
+    y = Yc + a*cos(t)*sin(phi) + b*sin(t)*cos(phi);
+    plot(x,y,'b','Linewidth',2);
+end
+hold off
+
+%% Orientation vector visualization superimposed to original image
+figure;
+imshow(K);
+
+hold on
+for k = 1:length(data)
+    vlength = major_axis_length(k);
+    t = linspace(-vlength/2,vlength/2,3);
+    Xc = data(k).Centroid(1);
+    Yc = data(k).Centroid(2);
+    phi = deg2rad(-data(k).Orientation);
+    x = Xc + t*cos(phi);
+    y = Yc + t*sin(phi);
+    plot(x,y,'b','Linewidth',2);
+end
+hold off
+grid on
+xticks(0:10:500)
+yticks(0:10:500)
+
+% Structured orientation vector visualization superimposed to original image
+figure;
+imshow(K);
+vlength = 14;
+xstep = 18;
+ystep = 18;
+xcoords = 0:xstep:475;
+xcoords = xcoords + vlength/2;
+ycoords = 0:ystep:470; %475
+ycoords = ycoords + vlength/2;
+[X,Y] = meshgrid(xcoords,ycoords);
+phimat = zeros(length(ycoords),length(xcoords));
+
+hold on
+for k = 1:length(xcoords)
+    for h = 1:length(ycoords)
+        t = linspace(-vlength/2,vlength/2,3);
+        Xc = X(h,k);
+        Yc = Y(h,k);
+        pixelindex = ((k-1)*ystep+vlength/2)*470 + (h-1)*xstep + vlength/2;
+        for i = 1:length(data)
+          cellindex = i*ismember([pixelindex],[CC.PixelIdxList{i}]);
+              if cellindex > 0
+                  break
+              end
+        end
+        if cellindex < 1
+            checksize = 5;
+            pixelindexmat = zeros(1+2*checksize);
+            cellindexmat = zeros(1+2*checksize);
+            pixelindexmat(1+checksize,:) = pixelindex;
+            for row = 1:checksize
+                pixelindexmat(row,:) = pixelindex - 470*(checksize-row+1);
+                pixelindexmat(1+2*checksize-row+1,:) = pixelindex + 470*(checksize-row+1);
+            end
+            for col = 1:checksize
+                pixelindexmat(:,col) = pixelindexmat(:,col) - (checksize-col+1);
+                pixelindexmat(:,1+2*checksize-col+1) = pixelindexmat(:,1+2*checksize-col+1) + (checksize-col+1);
+            end
+            for i = 1:length(data)
+                cellindexmat = cellindexmat + i*ismember([pixelindexmat],[CC.PixelIdxList{i}]);
+            end
+            if any(any(cellindexmat))
+                cellindexmat(cellindexmat == 0) = NaN;
+                cellindex = mode(cellindexmat, "all");
+            end           
+        end
+        if cellindex < 1
+            plot(Xc,Yc,'.','Color','g');
+        else 
+            phi = deg2rad(-data(cellindex).Orientation);
+            phimat(h,k) = phi;
+            phimat(phimat == 0) = NaN;
+            x = Xc + t*cos(phi);
+            y = Yc + t*sin(phi);
+            plot(x,y,'r','Linewidth',2);
+        end
+    end
+end
+hold off
+grid on
+xticks(0:20:500)
+yticks(0:20:500)
+
+%% Saving pictures
+name_picture=sprintf('00%d-Colors.tif',j);
+saveas(gcf,name_picture);
+
+%% calculations Shape Index
+table.SI = 4 *pi* table.Area ./ (table.Perimeter.^2);
+table.SIjamming = table.Perimeter./sqrt(table.Area);
+
+table_name=sprintf('00%d-CY5.csv',j);
+% writetable(table,table_name);
+
+plot(g,'XData',xdata,'YData',ydata,'EdgeColor','#0072BD','NodeColor','#0072BD')
