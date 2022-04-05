@@ -3,11 +3,15 @@ clear all;
 clc;
 warning('off');
 
-scale = 0.65; % 1/3.0769; % conversion Âµm/pixel
+%% parameters
+scale = 0.65; % conversion µm/pixel
+j=1; % number corresponding to the image (for file naming purposes)
+se = strel('disk',4); % structuring element for dilation/erosion of binary images 
+GCmin = 20; % minimum shared area ¿in pixels? for cells to be in contact
+maxcycle = 8; % maximum cycle size to look for in graphs
+mincycle = 8; % minimum cycle size to look for in graphs
 
 %% load image, binarize it and invert it
-
-j=1; % number corresponding to the image
 I=imread('Mask1.tif');
 % figure, imshow(I);
 
@@ -62,15 +66,13 @@ data = regionprops(CC,{...
     'MinorAxisLength',...
     'Orientation'});
 
-
 table = struct2table(data); % convert structure into table
 
 % converting data
-cell_size = [data.Area].*(scale^2);  % conversion en ÂµmÂ²
-cell_perimeter = [data.Perimeter].*scale; % conversion en Âµm
-major_axis_length = [data.MajorAxisLength].*scale; % conversion en Âµm
-minor_axis_length = [data.MinorAxisLength].*scale; % conversion en Âµm
-
+cell_size = [data.Area].*(scale^2);  % conversion en µm²
+cell_perimeter = [data.Perimeter].*scale; % conversion en µm
+major_axis_length = [data.MajorAxisLength].*scale; % conversion en µm
+minor_axis_length = [data.MinorAxisLength].*scale; % conversion en µm
 
 % data are transposed to be put in the columns of table
 table.Area = cell_size.';
@@ -94,11 +96,10 @@ L = zeros(CC.ImageSize); %preallocate
 % % imwrite(Lrgb, [ '00' num2str(j) '-cell-colors.bmp']);
 % caxis([0, 90])
 % colorbar;
-% title('Cell orientation (Â°)');
+% title('Cell orientation (°)');
 
 %% Find edges and adjacency matrix
 
-se = strel('disk',4);
 dilateLabel = imdilate(labeled,se);
 LBL = imLabelEdges(dilateLabel);
 % Show them
@@ -115,7 +116,7 @@ for c=1:N
     lbl = lbl(lbl~=0);
     % Removing contacts between cells that share very little space
     [GC,lbl] = groupcounts(lbl);
-    lbl = lbl(GC>20);
+    lbl = lbl(GC>GCmin);
     %
     adjacencyMatrix(c,lbl) = 1;
 end
@@ -133,8 +134,6 @@ hold on
 plot(g,'XData',xdata,'YData',ydata) 
 % remove
 
-maxcycle = 8;
-mincycle = 8;
 [cycles,edgecycles] = allcycles(g,'MaxCycleLength',maxcycle,'MinCycleLength',mincycle);
 
 xydata_cell = {data.Centroid}';
@@ -310,5 +309,3 @@ table.SIjamming = table.Perimeter./sqrt(table.Area);
 
 table_name=sprintf('00%d-CY5.csv',j);
 % writetable(table,table_name);
-
-plot(g,'XData',xdata,'YData',ydata,'EdgeColor','#0072BD','NodeColor','#0072BD')
