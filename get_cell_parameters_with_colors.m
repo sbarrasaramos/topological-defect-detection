@@ -114,8 +114,8 @@ for c=1:N
     lbl = immultiply(dilateLabel, imdilate(dilateLabel==c, se));
     lbl = lbl(lbl~=0);
     % Removing contacts between cells that share very little space
-    % [GC,lbl] = groupcounts(lbl);
-    % lbl = lbl(GC>20);
+    [GC,lbl] = groupcounts(lbl);
+    lbl = lbl(GC>20);
     %
     adjacencyMatrix(c,lbl) = 1;
 end
@@ -127,11 +127,14 @@ g = graph(adjacencyMatrix,'omitselfloops');
 xydata = vertcat(data.Centroid);
 xdata = xydata(:,1);
 ydata = xydata(:,2);
-% plot(g,'XData',xdata,'YData',ydata) 
+figure
+imshow(K);
+hold on
+plot(g,'XData',xdata,'YData',ydata) 
 % remove
 
-maxcycle = 4;
-mincycle = 4;
+maxcycle = 8;
+mincycle = 8;
 [cycles,edgecycles] = allcycles(g,'MaxCycleLength',maxcycle,'MinCycleLength',mincycle);
 
 xydata_cell = {data.Centroid}';
@@ -153,25 +156,25 @@ ccw_cycles = cellfun(ccw_cycle,cycles,xycycle_cell,'UniformOutput',false);
 ccw_edgecycles = cellfun(ccw_cycle,edgecycles,xycycle_cell,'UniformOutput',false);
 
 % solidity filter
-% solidity = @(cycle_xy)...
-%     polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).area /...
-%     polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).convhull.area;
-% solidities = cellfun(solidity,xycycle_cell);
+solidity = @(cycle_xy)...
+    polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).area /...
+    polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).convhull.area;
+solidities = cellfun(solidity,xycycle_cell);
 % solid_ccw_cycles = ccw_cycles(solidities > 0.9);
 % solid_ccw_edgecycles = ccw_edgecycles(solidities > 0.9);
 
-% % roundness filter % AND SOLIDITY
-% roundness = @(cycle_xy)...
-%     4*pi*polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).area /...
-%     (polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).perimeter)^2;
-% roundnesses = cellfun(roundness,xycycle_cell);
-% round_solid_ccw_cycles = ccw_cycles((solidities > 0.9).*(roundnesses > 0.8));
-% round_solid_ccw_edgecycles = ccw_edgecycles((solidities > 0.9).*(roundnesses > 0.8));
+% roundness filter % AND SOLIDITY
+roundness = @(cycle_xy)...
+    4*pi*polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).area /...
+    (polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).perimeter)^2;
+roundnesses = cellfun(roundness,xycycle_cell);
+round_solid_ccw_cycles = ccw_cycles(logical((solidities > 0.9).*(roundnesses > 0.8)));
+round_solid_ccw_edgecycles = ccw_edgecycles(logical((solidities > 0.9).*(roundnesses > 0.8)));
 
 topo_wrapper = @(cell_cycle) topological_charge(cell_cycle, data);
 
-topologicalCharges = cellfun(topo_wrapper,ccw_cycles);
-plusOneDefs = find(topologicalCharges==-0.5);
+topologicalCharges = cellfun(topo_wrapper,round_solid_ccw_cycles);
+plusOneDefs = find(topologicalCharges==1);
 
 cmap3 = parula(length(plusOneDefs));
 cmap3 = cmap3(randperm(size(cmap3, 1)), :);
@@ -185,7 +188,7 @@ for i = 1:length(plusOneDefs)
 %     nexttile
 %     imshow(K)
 %     hold on
-    highlight(plot(g,'XData',xdata,'YData',ydata),'Edges',ccw_edgecycles{plusOneDefs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
+    highlight(plot(g,'XData',xdata,'YData',ydata,'EdgeColor','#0072BD','NodeColor','#0072BD'),'Edges',round_solid_ccw_edgecycles{plusOneDefs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
 %     title("Defect " + i)
 %     labels = {'1','2','3','4','5','6','7','8'};
 %     plot(xdata(solid_ccw_cycles{plusOneDefs(i)}),ydata(solid_ccw_cycles{plusOneDefs(i)}),'Marker','.','MarkerSize',6,'MarkerFaceColor','r')
@@ -194,5 +197,5 @@ for i = 1:length(plusOneDefs)
 %     ymean = mean(ydata(solid_ccw_cycles{plusOneDefs(i)}));
 %     plot(xmean,ymean,'Marker','*','MarkerSize',6,'MarkerFaceColor','r')
 end
-
+plot(g,'XData',xdata,'YData',ydata,'EdgeColor','#0072BD','NodeColor','#0072BD')
 
