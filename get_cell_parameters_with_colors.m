@@ -154,158 +154,158 @@ for i = 181:182 %1:length(plusOneDefs)
     plot(xmean,ymean,'Marker','*','MarkerSize',6,'MarkerFaceColor','r')
 end
 
-% %% ellipse visualization thanks to its parametric equation superimposed to original image
-% figure;
-% imshow(K);
+%% ellipse visualization thanks to its parametric equation superimposed to original image
+figure;
+imshow(K);
+
+t = linspace(0,2*pi,50);
+hold on
+for k = 1:length(data)
+    a = data (k).MajorAxisLength/2;
+    b = data (k).MinorAxisLength/2;
+    Xc = data (k).Centroid(1);
+    Yc = data (k).Centroid(2);
+    phi = deg2rad(-data(k).Orientation);
+    x = Xc + a*cos(t)*cos(phi) - b*sin(t)*sin(phi);
+    y = Yc + a*cos(t)*sin(phi) + b*sin(t)*cos(phi);
+    plot(x,y,'b','Linewidth',2);
+end
+hold off
+
+% % Orientation vector visualization superimposed to original image
+figure;
+imshow(K);
+
+hold on
+for k = 1:length(data)
+    vlength = major_axis_length(k);
+    t = linspace(-vlength/2,vlength/2,3);
+    Xc = data(k).Centroid(1);
+    Yc = data(k).Centroid(2);
+    phi = deg2rad(-data(k).Orientation);
+    x = Xc + t*cos(phi);
+    y = Yc + t*sin(phi);
+    plot(x,y,'b','Linewidth',2);
+end
+hold off
+grid on
+xticks(0:10:500)
+yticks(0:10:500)
+
+% Structured orientation vector visualization superimposed to original image
+figure;
+imshow(K);
+vlength = 14;
+xstep = 18;
+ystep = 18;
+xcoords = 0:xstep:475;
+xcoords = xcoords + vlength/2;
+ycoords = 0:ystep:470; %475
+ycoords = ycoords + vlength/2;
+[X,Y] = meshgrid(xcoords,ycoords);
+phimat = zeros(length(ycoords),length(xcoords));
+
+hold on
+for k = 1:length(xcoords)
+    for h = 1:length(ycoords)
+        t = linspace(-vlength/2,vlength/2,3);
+        Xc = X(h,k);
+        Yc = Y(h,k);
+        pixelindex = ((k-1)*ystep+vlength/2)*470 + (h-1)*xstep + vlength/2;
+        for i = 1:length(data)
+          cellindex = i*ismember([pixelindex],[CC.PixelIdxList{i}]);
+              if cellindex > 0
+                  break
+              end
+        end
+        if cellindex < 1
+            checksize = 5;
+            pixelindexmat = zeros(1+2*checksize);
+            cellindexmat = zeros(1+2*checksize);
+            pixelindexmat(1+checksize,:) = pixelindex;
+            for row = 1:checksize
+                pixelindexmat(row,:) = pixelindex - 470*(checksize-row+1);
+                pixelindexmat(1+2*checksize-row+1,:) = pixelindex + 470*(checksize-row+1);
+            end
+            for col = 1:checksize
+                pixelindexmat(:,col) = pixelindexmat(:,col) - (checksize-col+1);
+                pixelindexmat(:,1+2*checksize-col+1) = pixelindexmat(:,1+2*checksize-col+1) + (checksize-col+1);
+            end
+            for i = 1:length(data)
+                cellindexmat = cellindexmat + i*ismember([pixelindexmat],[CC.PixelIdxList{i}]);
+            end
+            if any(any(cellindexmat))
+                cellindexmat(cellindexmat == 0) = NaN;
+                cellindex = mode(cellindexmat, "all");
+            end           
+        end
+        if cellindex < 1
+            plot(Xc,Yc,'.','Color','g');
+        else 
+            phi = deg2rad(-data(cellindex).Orientation);
+            phimat(h,k) = phi;
+            phimat(phimat == 0) = NaN;
+            x = Xc + t*cos(phi);
+            y = Yc + t*sin(phi);
+            plot(x,y,'r','Linewidth',2);
+        end
+    end
+end
+hold off
+grid on
+xticks(0:20:500)
+yticks(0:20:500)
+
+%% Adjacent cells calculation
+
+figure;
+imshow(K);
+hold on
+
+C = vertcat(data.Centroid);
+DT = delaunay(C(:,1), C(:,2))
+triplot(DT,C(:,1), C(:,2));
+
+% pixelinlinemat = zeros(length(data), length(data),100,2);
 % 
-% t = linspace(0,2*pi,50);
-% hold on
-% for k = 1:length(data)
-%     a = data (k).MajorAxisLength/2;
-%     b = data (k).MinorAxisLength/2;
-%     Xc = data (k).Centroid(1);
-%     Yc = data (k).Centroid(2);
-%     phi = deg2rad(-data(k).Orientation);
-%     x = Xc + a*cos(t)*cos(phi) - b*sin(t)*sin(phi);
-%     y = Yc + a*cos(t)*sin(phi) + b*sin(t)*cos(phi);
-%     plot(x,y,'b','Linewidth',2);
-% end
-% hold off
-% 
-% % % Orientation vector visualization superimposed to original image
-% figure;
-% imshow(K);
-% 
-% hold on
-% for k = 1:length(data)
-%     vlength = major_axis_length(k);
-%     t = linspace(-vlength/2,vlength/2,3);
-%     Xc = data(k).Centroid(1);
-%     Yc = data(k).Centroid(2);
-%     phi = deg2rad(-data(k).Orientation);
-%     x = Xc + t*cos(phi);
-%     y = Yc + t*sin(phi);
-%     plot(x,y,'b','Linewidth',2);
-% end
-% hold off
-% grid on
-% xticks(0:10:500)
-% yticks(0:10:500)
-% 
-% % Structured orientation vector visualization superimposed to original image
-% figure;
-% imshow(K);
-% vlength = 14;
-% xstep = 18;
-% ystep = 18;
-% xcoords = 0:xstep:475;
-% xcoords = xcoords + vlength/2;
-% ycoords = 0:ystep:470; %475
-% ycoords = ycoords + vlength/2;
-% [X,Y] = meshgrid(xcoords,ycoords);
-% phimat = zeros(length(ycoords),length(xcoords));
-% 
-% hold on
-% for k = 1:length(xcoords)
-%     for h = 1:length(ycoords)
-%         t = linspace(-vlength/2,vlength/2,3);
-%         Xc = X(h,k);
-%         Yc = Y(h,k);
-%         pixelindex = ((k-1)*ystep+vlength/2)*470 + (h-1)*xstep + vlength/2;
-%         for i = 1:length(data)
-%           cellindex = i*ismember([pixelindex],[CC.PixelIdxList{i}]);
-%               if cellindex > 0
-%                   break
-%               end
+% for k = 1:length(data) 
+%     for h = 1:length(data)
+%         cellmat(h,k,:) = data(k).Centroid - data(h).Centroid;
+%         celldistmat(h,k) = norm(reshape(cellmat(h,k,:),[1,2]))*(norm(reshape(cellmat(h,k,:),[1,2]))<100) ;
+%         cellanglemat(h,k) = atan2(cellmat(h,k,2),cellmat(h,k,1))*(norm(reshape(cellmat(h,k,:),[1,2]))<100);
+%         dispmat(h,k,:) = [cos(cellanglemat(h,k)) sin(cellanglemat(h,k))];
+%         for i = 1:ceil(celldistmat(h,k))
+%             pixelinlinemat(h,k,i,:) = round(data(h).Centroid + i*reshape(dispmat(h,k,:),[1,2]));
 %         end
-%         if cellindex < 1
-%             checksize = 5;
-%             pixelindexmat = zeros(1+2*checksize);
-%             cellindexmat = zeros(1+2*checksize);
-%             pixelindexmat(1+checksize,:) = pixelindex;
-%             for row = 1:checksize
-%                 pixelindexmat(row,:) = pixelindex - 470*(checksize-row+1);
-%                 pixelindexmat(1+2*checksize-row+1,:) = pixelindex + 470*(checksize-row+1);
-%             end
-%             for col = 1:checksize
-%                 pixelindexmat(:,col) = pixelindexmat(:,col) - (checksize-col+1);
-%                 pixelindexmat(:,1+2*checksize-col+1) = pixelindexmat(:,1+2*checksize-col+1) + (checksize-col+1);
-%             end
-%             for i = 1:length(data)
-%                 cellindexmat = cellindexmat + i*ismember([pixelindexmat],[CC.PixelIdxList{i}]);
-%             end
-%             if any(any(cellindexmat))
-%                 cellindexmat(cellindexmat == 0) = NaN;
-%                 cellindex = mode(cellindexmat, "all");
-%             end           
-%         end
-%         if cellindex < 1
-%             plot(Xc,Yc,'.','Color','g');
-%         else 
-%             phi = deg2rad(-data(cellindex).Orientation);
-%             phimat(h,k) = phi;
-%             phimat(phimat == 0) = NaN;
-%             x = Xc + t*cos(phi);
-%             y = Yc + t*sin(phi);
-%             plot(x,y,'r','Linewidth',2);
+%         if h < 203 && h > 201
+%             xu = reshape(pixelinlinemat(h,k,:,1), [1,100]);
+%             yu = reshape(pixelinlinemat(h,k,:,2), [1,100]);
+%             isNZ=(~reshape(pixelinlinemat(h,k,:,1), [1,100])==0);
+%             xu = xu(isNZ);
+%             yu = yu(isNZ);
+%             plot(xu,yu,'r','Linewidth',2)
 %         end
 %     end
 % end
-% hold off
-% grid on
-% xticks(0:20:500)
-% yticks(0:20:500)
-% 
-% %% Adjacent cells calculation
-% 
-% figure;
-% imshow(K);
-% hold on
-% 
-% C = vertcat(data.Centroid);
-% DT = delaunay(C(:,1), C(:,2))
-% triplot(DT,C(:,1), C(:,2));
-% 
-% % pixelinlinemat = zeros(length(data), length(data),100,2);
-% % 
-% % for k = 1:length(data) 
-% %     for h = 1:length(data)
-% %         cellmat(h,k,:) = data(k).Centroid - data(h).Centroid;
-% %         celldistmat(h,k) = norm(reshape(cellmat(h,k,:),[1,2]))*(norm(reshape(cellmat(h,k,:),[1,2]))<100) ;
-% %         cellanglemat(h,k) = atan2(cellmat(h,k,2),cellmat(h,k,1))*(norm(reshape(cellmat(h,k,:),[1,2]))<100);
-% %         dispmat(h,k,:) = [cos(cellanglemat(h,k)) sin(cellanglemat(h,k))];
-% %         for i = 1:ceil(celldistmat(h,k))
-% %             pixelinlinemat(h,k,i,:) = round(data(h).Centroid + i*reshape(dispmat(h,k,:),[1,2]));
-% %         end
-% %         if h < 203 && h > 201
-% %             xu = reshape(pixelinlinemat(h,k,:,1), [1,100]);
-% %             yu = reshape(pixelinlinemat(h,k,:,2), [1,100]);
-% %             isNZ=(~reshape(pixelinlinemat(h,k,:,1), [1,100])==0);
-% %             xu = xu(isNZ);
-% %             yu = yu(isNZ);
-% %             plot(xu,yu,'r','Linewidth',2)
-% %         end
-% %     end
-% % end
-% % 
-% % 
-% % % plot([data(1).Centroid(1) data(2).Centroid(1)], ...
-% % %     [data(1).Centroid(2) data(2).Centroid(2)],'g','Linewidth',2)
 % 
 % 
-% %% Saving pictures
-% 
-% name_picture=sprintf('00%d-Colors.tif',j);
-% saveas(gcf,name_picture);
-% 
-% 
-% %% calculations Shape Index
-% table.SI = 4 *pi* table.Area ./ (table.Perimeter.^2);
-% table.SIjamming = table.Perimeter./sqrt(table.Area);
-% 
-% 
-% table_name=sprintf('00%d-CY5.csv',j);
-% % writetable(table,table_name);
+% % plot([data(1).Centroid(1) data(2).Centroid(1)], ...
+% %     [data(1).Centroid(2) data(2).Centroid(2)],'g','Linewidth',2)
+
+
+%% Saving pictures
+
+name_picture=sprintf('00%d-Colors.tif',j);
+saveas(gcf,name_picture);
+
+
+%% calculations Shape Index
+table.SI = 4 *pi* table.Area ./ (table.Perimeter.^2);
+table.SIjamming = table.Perimeter./sqrt(table.Area);
+
+
+table_name=sprintf('00%d-CY5.csv',j);
+% writetable(table,table_name);
 
 function topoCharge = topological_charge(cycle, data_struct)
 % For clockwise cycles  
