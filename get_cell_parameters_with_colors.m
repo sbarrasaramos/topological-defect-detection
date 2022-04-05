@@ -1,9 +1,9 @@
 close all;
 clear all; 
 clc;
+warning('off');
 
-scale = 0.65; % 1/3.0769; % conversion µm/pixel
-
+scale = 0.65; % 1/3.0769; % conversion Âµm/pixel
 
 %% load image, binarize it and invert it
 
@@ -22,7 +22,7 @@ RGB_label = label2rgb(labeled, @spring, 'c', 'shuffle');
 % figure;
 % imshow(RGB_label);
 % title('connected components');
-% 
+ 
 %% erase cells at the borders 
 dilatedLabel = imclearborder(I);
 % figure, imshow(dilatedLabel);
@@ -31,11 +31,10 @@ CC = bwconncomp(dilatedLabel);
 labeled = labelmatrix(CC);
 RGB_label = label2rgb(labeled, @spring, 'c', 'shuffle');
 % figure, imshow(RGB_label);
-% % title('connected components');
+% title('connected components');
 
 
 %% erase small components 
-
 data = regionprops(CC,'Area');
 
 Max_size = max([data.Area]);
@@ -53,8 +52,6 @@ CC = bwconncomp(K);
 % imshow(K);
 % title('filtered binary image');
 
-
-
 %% extract area and perimeter of cells
 
 data = regionprops(CC,{...
@@ -69,10 +66,10 @@ data = regionprops(CC,{...
 table = struct2table(data); % convert structure into table
 
 % converting data
-cell_size = [data.Area].*(scale^2);  % conversion en µm²
-cell_perimeter = [data.Perimeter].*scale; % conversion en µm
-major_axis_length = [data.MajorAxisLength].*scale; % conversion en µm
-minor_axis_length = [data.MinorAxisLength].*scale; % conversion en µm
+cell_size = [data.Area].*(scale^2);  % conversion en ÂµmÂ²
+cell_perimeter = [data.Perimeter].*scale; % conversion en Âµm
+major_axis_length = [data.MajorAxisLength].*scale; % conversion en Âµm
+minor_axis_length = [data.MinorAxisLength].*scale; % conversion en Âµm
 
 
 % data are transposed to be put in the columns of table
@@ -97,11 +94,11 @@ L = zeros(CC.ImageSize); %preallocate
 % % imwrite(Lrgb, [ '00' num2str(j) '-cell-colors.bmp']);
 % caxis([0, 90])
 % colorbar;
-% title('Cell orientation (°)');
+% title('Cell orientation (Â°)');
 
 %% Find edges and adjacency matrix
 
-se = offsetstrel('ball',3,3);
+se = strel('disk',4);
 dilateLabel = imdilate(labeled,se);
 LBL = imLabelEdges(dilateLabel);
 % Show them
@@ -111,47 +108,94 @@ LBLrgb = label2rgb(LBL,cmap2); %build rgb image
 % imshow(LBLrgb);
 % title('Edges');
 
-figure
-tiledlayout flow
-% imshow(K);
-% hold on
-
 adjacencyMatrix = zeros(max(max(dilateLabel)));
 N = double(max(dilateLabel(:)));
-se = strel('diamond', 2);
 for c=1:N
-    lbl = intersect(1:N, unique(immultiply(dilateLabel, imdilate(dilateLabel==c, se))));
-    lbl = lbl(lbl~=c);
+    lbl = immultiply(dilateLabel, imdilate(dilateLabel==c, se));
+    lbl = lbl(lbl~=0);
+    % Removing contacts between cells that share very little space
+    [GC,lbl] = groupcounts(lbl);
+    lbl = lbl(GC>20);
+    %
     adjacencyMatrix(c,lbl) = 1;
 end
+adjacencyMatrix = adjacencyMatrix | adjacencyMatrix';
 
-g = graph(adjacencyMatrix);
+g = graph(adjacencyMatrix,'omitselfloops');
+
+% remove
 xydata = vertcat(data.Centroid);
 xdata = xydata(:,1);
 ydata = xydata(:,2);
-%  p = plot(g,'XData',xdata,'YData',ydata);
+figure
+imshow(K);
+hold on
+plot(g,'XData',xdata,'YData',ydata) 
+% remove
 
-[cycles,edgecycles] = allcycles(g,'MaxCycleLength',6,'MinCycleLength',6);
+maxcycle = 8;
+mincycle = 8;
+[cycles,edgecycles] = allcycles(g,'MaxCycleLength',maxcycle,'MinCycleLength',mincycle);
+
+xydata_cell = {data.Centroid}';
+xycycle_cell = xydata_cell(cell2mat(cycles)); 
+xycycle_cell = mat2cell(cell2mat(xycycle_cell),ones(size(xycycle_cell,1),1),2*maxcycle);
+
+% remove complex polygons
+complex_pol_index = @(cycle_xy) polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).NumRegions;
+complex_pol_indices = cellfun(complex_pol_index,xycycle_cell);
+cycles = cycles(complex_pol_indices == 1);
+edgecycles = edgecycles(complex_pol_indices == 1);
+xycycle_cell = xycycle_cell(complex_pol_indices == 1);
+
+% sortedcycles
+clockwise_index = @(cycle_xy) ispolycw(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)]));
+clockwise_indices = cellfun(clockwise_index,xycycle_cell);
+ccw_cycle = @(cycle, cycle_xy) [flip(cycle)*clockwise_index(cycle_xy) + cycle*(1-clockwise_index(cycle_xy))];
+ccw_cycles = cellfun(ccw_cycle,cycles,xycycle_cell,'UniformOutput',false);
+ccw_edgecycles = cellfun(ccw_cycle,edgecycles,xycycle_cell,'UniformOutput',false);
+
+% solidity filter
+solidity = @(cycle_xy)...
+    polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).area /...
+    polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).convhull.area;
+solidities = cellfun(solidity,xycycle_cell);
+% solid_ccw_cycles = ccw_cycles(solidities > 0.9);
+% solid_ccw_edgecycles = ccw_edgecycles(solidities > 0.9);
+
+% roundness filter % AND SOLIDITY
+roundness = @(cycle_xy)...
+    4*pi*polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).area /...
+    (polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).perimeter)^2;
+roundnesses = cellfun(roundness,xycycle_cell);
+round_solid_ccw_cycles = ccw_cycles(logical((solidities > 0.9).*(roundnesses > 0.8)));
+round_solid_ccw_edgecycles = ccw_edgecycles(logical((solidities > 0.9).*(roundnesses > 0.8)));
 
 topo_wrapper = @(cell_cycle) topological_charge(cell_cycle, data);
 
-topologicalCharges = cellfun(topo_wrapper,cycles);
-plusOneDefs = find(topologicalCharges==0.5);
+topologicalCharges = cellfun(topo_wrapper,round_solid_ccw_cycles);
+plusOneDefs = find(topologicalCharges==1);
 
 cmap3 = parula(length(plusOneDefs));
 cmap3 = cmap3(randperm(size(cmap3, 1)), :);
-for i = 181:182 %1:length(plusOneDefs)
-    nexttile
-    imshow(K)
-    hold on
-    highlight(plot(g,'XData',xdata,'YData',ydata),'Edges',edgecycles{plusOneDefs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
-    title("Defect " + i)
-    labels = {'1','2','3','4','5','6'};
-    plot(xdata(cycles{plusOneDefs(i)}),ydata(cycles{plusOneDefs(i)}),'Marker','.','MarkerSize',6,'MarkerFaceColor','r')
-    text(xdata(cycles{plusOneDefs(i)}),ydata(cycles{plusOneDefs(i)}),labels,'VerticalAlignment','bottom','HorizontalAlignment','right')
-    xmean = mean(xdata(cycles{plusOneDefs(i)}));
-    ymean = mean(ydata(cycles{plusOneDefs(i)}));
-    plot(xmean,ymean,'Marker','*','MarkerSize',6,'MarkerFaceColor','r')
+
+figure
+% tiledlayout flow
+imshow(K);
+hold on
+
+for i = 1:length(plusOneDefs)
+%     nexttile
+%     imshow(K)
+%     hold on
+    highlight(plot(g,'XData',xdata,'YData',ydata,'EdgeColor','#0072BD','NodeColor','#0072BD'),'Edges',round_solid_ccw_edgecycles{plusOneDefs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
+%     title("Defect " + i)
+%     labels = {'1','2','3','4','5','6','7','8'};
+%     plot(xdata(solid_ccw_cycles{plusOneDefs(i)}),ydata(solid_ccw_cycles{plusOneDefs(i)}),'Marker','.','MarkerSize',6,'MarkerFaceColor','r')
+%     text(xdata(solid_ccw_cycles{plusOneDefs(i)}),ydata(solid_ccw_cycles{plusOneDefs(i)}),labels,'VerticalAlignment','bottom','HorizontalAlignment','right')
+%     xmean = mean(xdata(solid_ccw_cycles{plusOneDefs(i)}));
+%     ymean = mean(ydata(solid_ccw_cycles{plusOneDefs(i)}));
+%     plot(xmean,ymean,'Marker','*','MarkerSize',6,'MarkerFaceColor','r')
 end
 
 %% ellipse visualization thanks to its parametric equation superimposed to original image
@@ -172,7 +216,7 @@ for k = 1:length(data)
 end
 hold off
 
-% % Orientation vector visualization superimposed to original image
+%% Orientation vector visualization superimposed to original image
 figure;
 imshow(K);
 
@@ -256,81 +300,15 @@ grid on
 xticks(0:20:500)
 yticks(0:20:500)
 
-%% Adjacent cells calculation
-
-figure;
-imshow(K);
-hold on
-
-C = vertcat(data.Centroid);
-DT = delaunay(C(:,1), C(:,2))
-triplot(DT,C(:,1), C(:,2));
-
-% pixelinlinemat = zeros(length(data), length(data),100,2);
-% 
-% for k = 1:length(data) 
-%     for h = 1:length(data)
-%         cellmat(h,k,:) = data(k).Centroid - data(h).Centroid;
-%         celldistmat(h,k) = norm(reshape(cellmat(h,k,:),[1,2]))*(norm(reshape(cellmat(h,k,:),[1,2]))<100) ;
-%         cellanglemat(h,k) = atan2(cellmat(h,k,2),cellmat(h,k,1))*(norm(reshape(cellmat(h,k,:),[1,2]))<100);
-%         dispmat(h,k,:) = [cos(cellanglemat(h,k)) sin(cellanglemat(h,k))];
-%         for i = 1:ceil(celldistmat(h,k))
-%             pixelinlinemat(h,k,i,:) = round(data(h).Centroid + i*reshape(dispmat(h,k,:),[1,2]));
-%         end
-%         if h < 203 && h > 201
-%             xu = reshape(pixelinlinemat(h,k,:,1), [1,100]);
-%             yu = reshape(pixelinlinemat(h,k,:,2), [1,100]);
-%             isNZ=(~reshape(pixelinlinemat(h,k,:,1), [1,100])==0);
-%             xu = xu(isNZ);
-%             yu = yu(isNZ);
-%             plot(xu,yu,'r','Linewidth',2)
-%         end
-%     end
-% end
-% 
-% 
-% % plot([data(1).Centroid(1) data(2).Centroid(1)], ...
-% %     [data(1).Centroid(2) data(2).Centroid(2)],'g','Linewidth',2)
-
-
 %% Saving pictures
-
 name_picture=sprintf('00%d-Colors.tif',j);
 saveas(gcf,name_picture);
-
 
 %% calculations Shape Index
 table.SI = 4 *pi* table.Area ./ (table.Perimeter.^2);
 table.SIjamming = table.Perimeter./sqrt(table.Area);
 
-
 table_name=sprintf('00%d-CY5.csv',j);
 % writetable(table,table_name);
 
-function topoCharge = topological_charge(cycle, data_struct)
-% For clockwise cycles  
-    xydata = vertcat(data_struct.Centroid);
-    xdata = xydata(:,1);
-    ydata = xydata(:,2);
-    x = xdata(cycle);
-    y = ydata(cycle);
-    ch = convhull(x,y,'Simplify',true);
-    ch = ch(1:end-1);
-    % plot(x(ch),y(ch),'g')
-    oDef = [data_struct(cycle).Orientation];
-    oDef_ch = oDef(ch);
-    oDef_ch_aux = [oDef_ch(end) oDef_ch(1:end-1)];
-    difODef_ch = (oDef_ch_aux - oDef_ch)/180*pi;
-    difODef_ch_norm =  [difODef_ch(abs(difODef_ch)<=pi/2), difODef_ch(difODef_ch<-pi/2) + pi, difODef_ch(difODef_ch>pi/2) - pi];
-    topoCharge = sum(difODef_ch_norm)/(2*pi);
-end
-
-function topoCharge = topological_charge_naive(cycle, data_struct)
-    % For clockwise cycles
-    oDef = [data_struct(cycle).Orientation];
-    oDef_aux = [oDef(end) oDef(1:end-1)];
-    difODef = (oDef_aux - oDef)/180*pi;
-    difODef_norm =  [difODef(abs(difODef)<=pi/2), difODef(difODef<-pi/2) + pi, difODef(difODef>pi/2) - pi];
-    topoCharge = sum(difODef_norm)/(2*pi);
-end
-
+plot(g,'XData',xdata,'YData',ydata,'EdgeColor','#0072BD','NodeColor','#0072BD')
