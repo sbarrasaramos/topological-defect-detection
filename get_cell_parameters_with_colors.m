@@ -11,6 +11,22 @@ GCmin = 20; % minimum shared area ¿in pixels? for cells to be in contact
 maxcycle = 8; % maximum cycle size to look for in graphs
 mincycle = 8; % minimum cycle size to look for in graphs
 
+%% flags --> 0 = off; 1 = on; 2 = on + plot; 3 = on + plot + save
+image_flag = 1; % load image
+binary_flag = 1; % binarize image it and invert it if necessary
+cc_flag = 1; % find all connected components = cells
+borderoff_flag = 1; % erase cells at the borders 
+smalloff_flag = 0; % erase small components
+celldata_flag = 1; % extract geometrical data from cells
+graph_flag = 2; % find adjacency matrix and graph
+complexpoloff_flag = 1; % remove complex polygons
+ccw_flag = 1; % set cycles to ccw order
+solidityfilter_flag = 1; % solidity filter
+roundnessfilters_flag = 1; % roundness filter
+naive_flag = 0; % naive on = convexhull
+% visualize ellipses superimposed to original image
+% visualize orientation vectors superimposed to original image
+
 %% load image, binarize it and invert it
 I=imread('Mask1.tif');
 % figure, imshow(I);
@@ -19,7 +35,7 @@ I=imbinarize(I);
 I=imcomplement(I);
 % figure, imshow(I);
 
-%% find and vizualise all connected components = cells
+%% find and visualize all connected components = cells
 CC = bwconncomp(I);
 labeled = labelmatrix(CC);
 RGB_label = label2rgb(labeled, @spring, 'c', 'shuffle');
@@ -38,7 +54,7 @@ RGB_label = label2rgb(labeled, @spring, 'c', 'shuffle');
 % title('connected components');
 
 
-%% erase small components 
+%% erase small components and visualize binary image before and after filtering by size
 data = regionprops(CC,'Area');
 
 Max_size = max([data.Area]);
@@ -47,7 +63,6 @@ Min_size = 0; %(mean([data.Area]))/10;
 K = bwareafilt(dilatedLabel,[Min_size Max_size]);
 CC = bwconncomp(K);
 
-%% visualize binary image before and after filtering by size
 % figure;
 % subplot(1,2,1);
 % imshow(dilatedLabel);
@@ -56,7 +71,7 @@ CC = bwconncomp(K);
 % imshow(K);
 % title('filtered binary image');
 
-%% extract area and perimeter of cells
+%% extract geometrical data from cells
 
 data = regionprops(CC,{...
     'Area',...
@@ -81,7 +96,7 @@ table.Orientation = [data.Orientation].';
 table.MajorAxisLength = major_axis_length.';
 table.MinorAxisLength = minor_axis_length.';
 
-%% visualize remaining cells
+%% visualize one of the cells parameters
 
 mal = abs(table.Orientation); %Plug in Orientation here.
 [~,idx] = histc(mal,0:90);  
@@ -98,7 +113,7 @@ L = zeros(CC.ImageSize); %preallocate
 % colorbar;
 % title('Cell orientation (°)');
 
-%% Find edges and adjacency matrix
+%% Find adjacency matrix and graph
 
 dilateLabel = imdilate(labeled,se);
 LBL = imLabelEdges(dilateLabel);
