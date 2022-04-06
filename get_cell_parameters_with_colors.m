@@ -7,7 +7,7 @@ origin_filename = 'Mask1.tif'; % path + filename of the image/mask to be analyze
 cell_color = 'Black';
 pixel_scale = 0.65; % conversion µm/pixel
 dilate_strel = strel('disk',4); % structuring element for dilation/erosion of binary images 
-gc_min = 20; % minimum shared area ¿in pixels? for cells to be in contact
+gc_min = 20 * pixel_scale^2; % minimum shared area ¿in pixels? for cells to be in contact
 max_cycle_elements = 8; % maximum cycle size to look for in graphs
 min_cycle_elements = 8; % minimum cycle size to look for in graphs
 j=1; % number corresponding to the image (for file naming purposes)
@@ -96,49 +96,42 @@ if cc_flag > 0
 end
 
 %% extract geometrical data from cells
-
-data = regionprops(cc,{...
-    'Area',...
-    'Perimeter',...
-    'Centroid',...
-    'MajorAxisLength',...
-    'MinorAxisLength',...
-    'Orientation'});
-
-table = struct2table(data); % convert structure into table
-
-% t = num2cell(field1);
-% [A.B] = t{:}
-
-% converting data
-cell_size = [data.Area].*(pixel_scale^2);  % conversion en µm²
-cell_perimeter = [data.Perimeter].*pixel_scale; % conversion en µm
-major_axis_length = [data.MajorAxisLength].*pixel_scale; % conversion en µm
-minor_axis_length = [data.MinorAxisLength].*pixel_scale; % conversion en µm
-
-% data are transposed to be put in the columns of table
-table.Area = cell_size.';
-table.Perimeter = cell_perimeter.';
-table.Orientation = [data.Orientation].';
-table.MajorAxisLength = major_axis_length.';
-table.MinorAxisLength = minor_axis_length.';
+if celldata_flag > 0
+    data = regionprops(cc,{...
+        'Area',...
+        'Perimeter',...
+        'Centroid',...
+        'MajorAxisLength',...
+        'MinorAxisLength',...
+        'Orientation'});
+    
+    % scaling data
+    scaling = mat2cell( [ ...
+        data.Perimeter; ...
+        data.MajorAxisLength; ...
+        data.MinorAxisLength; ...
+        reshape([data.Centroid],2,362); ...
+        data.Area ...
+        ]'*pixel_scale.*[ones(1,5) pixel_scale],ones(362,1),[1 1 1 2 1]);
+    [data.Perimeter, data.MajorAxisLength, data.MinorAxisLength, data.Centroid, data.Area] = scaling{:};
+end
 
 %% visualize one of the cells parameters
 
-mal = abs(table.Orientation); %Plug in Orientation here.
+mal = abs([data.Orientation]); %Plug in Orientation here.
 [~,idx] = histc(mal,0:90);  
 L = zeros(cc.ImageSize); %preallocate
     for ii = 1:cc.NumObjects
       L(cc.PixelIdxList{ii}) = idx(ii);    %fill in indices
     end
-% cmap = parula(90);  %a colormap
-% Lrgb = label2rgb(L,cmap); %build rgb image
-% figure;
-% imshow(Lrgb);
-% % imwrite(Lrgb, [ '00' num2str(j) '-cell-colors.bmp']);
-% caxis([0, 90])
-% colorbar;
-% title('Cell orientation (°)');
+cmap = parula(90);  %a colormap
+Lrgb = label2rgb(L,cmap); %build rgb image
+figure;
+imshow(Lrgb);
+% imwrite(Lrgb, [ '00' num2str(j) '-cell-colors.bmp']);
+caxis([0, 90])
+colorbar;
+title('Cell orientation (°)');
 
 %% Find adjacency matrix and graph
 
@@ -265,7 +258,7 @@ imshow(K);
 
 hold on
 for k = 1:length(data)
-    vlength = major_axis_length(k);
+    vlength = cell_major_axis(k);
     t = linspace(-vlength/2,vlength/2,3);
     Xc = data(k).Centroid(1);
     Yc = data(k).Centroid(2);
@@ -353,3 +346,5 @@ table.SIjamming = table.Perimeter./sqrt(table.Area);
 
 table_name=sprintf('00%d-CY5.csv',j);
 % writetable(table,table_name);
+
+clear *_flag
