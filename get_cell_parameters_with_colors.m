@@ -4,16 +4,21 @@ clc;
 warning('off');
 
 %% parameters
+originfilename = 'Mask1.tif'; % path + filename of the image/mask to be analyzed
+cellcolor = 'Black';
 scale = 0.65; % conversion µm/pixel
-j=1; % number corresponding to the image (for file naming purposes)
 se = strel('disk',4); % structuring element for dilation/erosion of binary images 
 GCmin = 20; % minimum shared area ¿in pixels? for cells to be in contact
 maxcycle = 8; % maximum cycle size to look for in graphs
 mincycle = 8; % minimum cycle size to look for in graphs
+j=1; % number corresponding to the image (for file naming purposes)
+
+%% Create analysis folder where data and images are saved
+analysisfoldername = extractBefore(originfilename,'.');
+[status, msg, msgID] = mkdir(analysisfoldername);
 
 %% flags --> 0 = off; 1 = on; 2 = on + plot; 3 = on + plot + save
-image_flag = 1; % load image
-binary_flag = 1; % binarize image it and invert it if necessary
+image2binary_flag = 3; % load image, binarize it and invert it if necessary
 cc_flag = 1; % find all connected components = cells
 borderoff_flag = 1; % erase cells at the borders 
 smalloff_flag = 0; % erase small components
@@ -27,12 +32,34 @@ naive_flag = 0; % naive on = convexhull
 % visualize ellipses superimposed to original image
 % visualize orientation vectors superimposed to original image
 
-%% load image, binarize it and invert it
-I=imread('Mask1.tif');
-% figure, imshow(I);
+%% load image, binarize it and invert it if necessary
+if image2binary_flag > 0
+    I=imbinarize(imread(originfilename));
+    switch lower(cellcolor)
+        case 'black'
+            I=imcomplement(I);
+        case 'white'
+        otherwise
+            disp('Image is not a mask')
+    end
+    if image2binary_flag > 1
+        figure, imshow(I);
+        if image2binary_flag > 2
+            saveas(gcf,fullfile(analysisfoldername, sprintf('00%d-binary.tif',j)));
+        end
+    end
+end
 
-I=imbinarize(I);
-I=imcomplement(I);
+if image2binary_flag > 0
+    
+    if image2binary_flag > 1
+        figure, imshow(I);
+        if image2binary_flag > 2
+            saveas(gcf,sprintf('00%d-image.tif',j));
+        end
+    end
+end
+
 % figure, imshow(I);
 
 %% find and visualize all connected components = cells
