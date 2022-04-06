@@ -1,41 +1,40 @@
 close all;
 clear all; 
 clc;
-warning('off');
 
 %% parameters
-originfilename = 'Mask1.tif'; % path + filename of the image/mask to be analyzed
-cellcolor = 'Black';
-scale = 0.65; % conversion µm/pixel
-se = strel('disk',4); % structuring element for dilation/erosion of binary images 
-GCmin = 20; % minimum shared area ¿in pixels? for cells to be in contact
-maxcycle = 8; % maximum cycle size to look for in graphs
-mincycle = 8; % minimum cycle size to look for in graphs
+origin_filename = 'Mask1.tif'; % path + filename of the image/mask to be analyzed
+cell_color = 'Black';
+pixel_scale = 0.65; % conversion µm/pixel
+dilate_strel = strel('disk',4); % structuring element for dilation/erosion of binary images 
+gc_min = 20; % minimum shared area ¿in pixels? for cells to be in contact
+max_cycle_elements = 8; % maximum cycle size to look for in graphs
+min_cycle_elements = 8; % minimum cycle size to look for in graphs
 j=1; % number corresponding to the image (for file naming purposes)
 
 %% Create analysis folder where data and images are saved
-analysisfoldername = extractBefore(originfilename,'.');
-[status, msg, msgID] = mkdir(analysisfoldername);
+analysis_foldername = extractBefore(origin_filename,'.');
+[status, msg, msgID] = mkdir(analysis_foldername);
 
-%% flags --> 0 = off; 1 = on; 2 = on + plot; 3 = on + plot + save
-image2binary_flag = 3; % load image, binarize it and invert it if necessary
-cc_flag = 1; % find all connected components = cells
+%% flags --> 0 = off; 1 = on; 2 = on + plot; 3 (or >) = on + plot + save
+image2binary_flag = 1; % load image, binarize it and invert it if necessary
 borderoff_flag = 1; % erase cells at the borders 
-smalloff_flag = 0; % erase small components
+smalloff_flag = 1; % erase small components
+cc_flag = 1; % find all connected components = cells
 celldata_flag = 1; % extract geometrical data from cells
 graph_flag = 2; % find adjacency matrix and graph
 complexpoloff_flag = 1; % remove complex polygons
 ccw_flag = 1; % set cycles to ccw order
 solidityfilter_flag = 1; % solidity filter
-roundnessfilters_flag = 1; % roundness filter
+roundnessfilter_flag = 1; % roundness filter
 naive_flag = 0; % naive on = convexhull
 % visualize ellipses superimposed to original image
 % visualize orientation vectors superimposed to original image
 
 %% load image, binarize it and invert it if necessary
 if image2binary_flag > 0
-    I=imbinarize(imread(originfilename));
-    switch lower(cellcolor)
+    I=imbinarize(imread(origin_filename));
+    switch lower(cell_color)
         case 'black'
             I=imcomplement(I);
         case 'white'
@@ -45,62 +44,60 @@ if image2binary_flag > 0
     if image2binary_flag > 1
         figure, imshow(I);
         if image2binary_flag > 2
-            saveas(gcf,fullfile(analysisfoldername, sprintf('00%d-binary.tif',j)));
+            saveas(gcf,fullfile(analysis_foldername, sprintf('00%d-binary.tif',j)));
         end
     end
+else
+    error('You cannot perform an analysis without a binary image. Set image2binary_flag to 1 or a higher value.')
 end
 
-if image2binary_flag > 0
-    
-    if image2binary_flag > 1
-        figure, imshow(I);
-        if image2binary_flag > 2
-            saveas(gcf,sprintf('00%d-image.tif',j));
-        end
-    end
-end
-
-% figure, imshow(I);
-
-%% find and visualize all connected components = cells
-CC = bwconncomp(I);
-labeled = labelmatrix(CC);
-RGB_label = label2rgb(labeled, @spring, 'c', 'shuffle');
-% figure;
-% imshow(RGB_label);
-% title('connected components');
- 
 %% erase cells at the borders 
-dilatedLabel = imclearborder(I);
-% figure, imshow(dilatedLabel);
-
-CC = bwconncomp(dilatedLabel);
-labeled = labelmatrix(CC);
-RGB_label = label2rgb(labeled, @spring, 'c', 'shuffle');
-% figure, imshow(RGB_label);
-% title('connected components');
-
+if borderoff_flag > 0
+    I = imclearborder(I);
+    if borderoff_flag > 1
+        figure, imshow(I);
+        if borderoff_flag > 2
+            saveas(gcf,fullfile(analysis_foldername, sprintf('00%d-binary_WOEdges.tif',j)));
+        end
+    end
+else
+    warning("Parameters obtained from cells at the borders might result in biased or incorrect results.")
+end
 
 %% erase small components and visualize binary image before and after filtering by size
-data = regionprops(CC,'Area');
+if smalloff_flag > 0
+    cell_areas = regionprops(I, 'Area');
+    max_size = max([cell_areas.Area]);
+    min_size = mean([cell_areas.Area])/10; 
+    I = bwareafilt(I,[min_size max_size]);
+    if smalloff_flag > 1
+        figure, imshow(I);
+        if smalloff_flag > 2
+            saveas(gcf,fullfile(analysis_foldername, sprintf('00%d-binary_WOSmall.tif',j)));
+        end
+    end
+    clear cell_areas  max_size min_size
+else
+    warning("Very small cells are usually the result of issues during the segmentation process.")
+end
 
-Max_size = max([data.Area]);
-Min_size = 0; %(mean([data.Area]))/10; 
-
-K = bwareafilt(dilatedLabel,[Min_size Max_size]);
-CC = bwconncomp(K);
-
-% figure;
-% subplot(1,2,1);
-% imshow(dilatedLabel);
-% title('original binary image');
-% subplot(1,2,2);
-% imshow(K);
-% title('filtered binary image');
+%% find label and visualize all connected components = cells
+if cc_flag > 0
+    cc = bwconncomp(I);
+    labeled = labelmatrix(cc);
+    if cc_flag > 1
+        cc_RGBlabel = label2rgb(labeled, @spring, 'c', 'shuffle');
+        figure, imshow(cc_RGBlabel);
+        title('connected components');
+        if cc_flag > 2
+            saveas(gcf,fullfile(analysis_foldername, sprintf('00%d-connected_components.tif',j)));
+        end
+    end
+end
 
 %% extract geometrical data from cells
 
-data = regionprops(CC,{...
+data = regionprops(cc,{...
     'Area',...
     'Perimeter',...
     'Centroid',...
@@ -110,11 +107,14 @@ data = regionprops(CC,{...
 
 table = struct2table(data); % convert structure into table
 
+% t = num2cell(field1);
+% [A.B] = t{:}
+
 % converting data
-cell_size = [data.Area].*(scale^2);  % conversion en µm²
-cell_perimeter = [data.Perimeter].*scale; % conversion en µm
-major_axis_length = [data.MajorAxisLength].*scale; % conversion en µm
-minor_axis_length = [data.MinorAxisLength].*scale; % conversion en µm
+cell_size = [data.Area].*(pixel_scale^2);  % conversion en µm²
+cell_perimeter = [data.Perimeter].*pixel_scale; % conversion en µm
+major_axis_length = [data.MajorAxisLength].*pixel_scale; % conversion en µm
+minor_axis_length = [data.MinorAxisLength].*pixel_scale; % conversion en µm
 
 % data are transposed to be put in the columns of table
 table.Area = cell_size.';
@@ -127,9 +127,9 @@ table.MinorAxisLength = minor_axis_length.';
 
 mal = abs(table.Orientation); %Plug in Orientation here.
 [~,idx] = histc(mal,0:90);  
-L = zeros(CC.ImageSize); %preallocate
-    for ii = 1:CC.NumObjects
-      L(CC.PixelIdxList{ii}) = idx(ii);    %fill in indices
+L = zeros(cc.ImageSize); %preallocate
+    for ii = 1:cc.NumObjects
+      L(cc.PixelIdxList{ii}) = idx(ii);    %fill in indices
     end
 % cmap = parula(90);  %a colormap
 % Lrgb = label2rgb(L,cmap); %build rgb image
@@ -142,7 +142,7 @@ L = zeros(CC.ImageSize); %preallocate
 
 %% Find adjacency matrix and graph
 
-dilateLabel = imdilate(labeled,se);
+dilateLabel = imdilate(labeled,dilate_strel);
 LBL = imLabelEdges(dilateLabel);
 % Show them
 cmap2 = parula(max(max(LBL)));
@@ -154,11 +154,11 @@ LBLrgb = label2rgb(LBL,cmap2); %build rgb image
 adjacencyMatrix = zeros(max(max(dilateLabel)));
 N = double(max(dilateLabel(:)));
 for c=1:N
-    lbl = immultiply(dilateLabel, imdilate(dilateLabel==c, se));
+    lbl = immultiply(dilateLabel, imdilate(dilateLabel==c, dilate_strel));
     lbl = lbl(lbl~=0);
     % Removing contacts between cells that share very little space
     [GC,lbl] = groupcounts(lbl);
-    lbl = lbl(GC>GCmin);
+    lbl = lbl(GC>gc_min);
     %
     adjacencyMatrix(c,lbl) = 1;
 end
@@ -176,11 +176,13 @@ hold on
 plot(g,'XData',xdata,'YData',ydata) 
 % remove
 
-[cycles,edgecycles] = allcycles(g,'MaxCycleLength',maxcycle,'MinCycleLength',mincycle);
+% warning('off')
+[cycles,edgecycles] = allcycles(g,'MaxCycleLength',max_cycle_elements,'MinCycleLength',min_cycle_elements);
+% warning('on')
 
 xydata_cell = {data.Centroid}';
 xycycle_cell = xydata_cell(cell2mat(cycles)); 
-xycycle_cell = mat2cell(cell2mat(xycycle_cell),ones(size(xycycle_cell,1),1),2*maxcycle);
+xycycle_cell = mat2cell(cell2mat(xycycle_cell),ones(size(xycycle_cell,1),1),2*max_cycle_elements);
 
 % remove complex polygons
 complex_pol_index = @(cycle_xy) polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).NumRegions;
@@ -298,7 +300,7 @@ for k = 1:length(xcoords)
         Yc = Y(h,k);
         pixelindex = ((k-1)*ystep+vlength/2)*470 + (h-1)*xstep + vlength/2;
         for i = 1:length(data)
-          cellindex = i*ismember([pixelindex],[CC.PixelIdxList{i}]);
+          cellindex = i*ismember([pixelindex],[cc.PixelIdxList{i}]);
               if cellindex > 0
                   break
               end
@@ -317,7 +319,7 @@ for k = 1:length(xcoords)
                 pixelindexmat(:,1+2*checksize-col+1) = pixelindexmat(:,1+2*checksize-col+1) + (checksize-col+1);
             end
             for i = 1:length(data)
-                cellindexmat = cellindexmat + i*ismember([pixelindexmat],[CC.PixelIdxList{i}]);
+                cellindexmat = cellindexmat + i*ismember([pixelindexmat],[cc.PixelIdxList{i}]);
             end
             if any(any(cellindexmat))
                 cellindexmat(cellindexmat == 0) = NaN;
