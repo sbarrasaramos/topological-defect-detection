@@ -305,6 +305,11 @@ if topocycles_flag > 0
         end
     end
 
+    if (plusonedefs_flag > 2 || minusonedefs_flag > 2 || plushalfdefs_flag > 2 || minushalfdefs_flag > 2)
+        saveas(tiledfig,fullfile(analysis_foldername, sprintf('00%d-defect_cycles.tif',j)));
+        saveas(singlefig,fullfile(analysis_foldername, sprintf('00%d-defect_centers.tif',j)));
+    end
+
 end
 
 %% ellipse visualization thanks to its parametric equation superimposed to original image
