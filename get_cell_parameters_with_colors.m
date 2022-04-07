@@ -3,11 +3,11 @@ clear all;
 clc;
 
 %% parameters
-origin_filename = 'Mask1.tif'; % path + filename of the image/mask to be analyzed
-cell_color = 'Black';
+origin_filename = 'Mask2.tif'; % path + filename of the image/mask to be analyzed
+cell_color = 'Black'; 
 pixel_scale = 0.65; % conversion µm/pixel
-dilate_strel = strel('disk',4); % structuring element for dilation/erosion of binary images 
-gc_min = 20 * pixel_scale^2; % minimum shared area ¿in pixels? for cells to be in contact
+dilate_strel = strel('diamond',1); % structuring element for dilation/erosion of binary images 
+minimum_contact_length = @(perimeter) 0.05*perimeter; % minimum shared area ¿in pixels? for cells to be in contact
 max_cycle_elements = 8; % maximum cycle size to look for in graphs
 min_cycle_elements = 8; % minimum cycle size to look for in graphs
 j=1; % number corresponding to the image (for file naming purposes)
@@ -21,13 +21,18 @@ image2binary_flag = 1; % load image, binarize it and invert it if necessary
 borderoff_flag = 1; % erase cells at the borders 
 smalloff_flag = 1; % erase small components
 cc_flag = 1; % find all connected components = cells
-celldata_flag = 1; % extract geometrical data from cells
-graph_flag = 2; % find adjacency matrix and graph
+celldata_flag = 1; % extract geometrical data from cells and visualize orientation
+graph_flag = 1; % find adjacency matrix and graph
+topocycles_flag = 1; % find cycles that have a certain topological charge
 complexpoloff_flag = 1; % remove complex polygons
-ccw_flag = 1; % set cycles to ccw order
 solidityfilter_flag = 1; % solidity filter
 roundnessfilter_flag = 1; % roundness filter
 naive_flag = 0; % naive on = convexhull
+plusonedefs_flag = 2; % Look for +1 defects
+minusonedefs_flag = 2; % Look for -1 defects
+plushalfdefs_flag = 2; % Look for +1/2 defects
+minushalfdefs_flag = 2; % Look for -1/2 defects
+
 % visualize ellipses superimposed to original image
 % visualize orientation vectors superimposed to original image
 
@@ -66,27 +71,27 @@ end
 
 %% erase small components and visualize binary image before and after filtering by size
 if smalloff_flag > 0
-    cell_areas = regionprops(I, 'Area');
-    max_size = max([cell_areas.Area]);
-    min_size = mean([cell_areas.Area])/10; 
-    I = bwareafilt(I,[min_size max_size]);
+    cell_sizes = regionprops(I, 'Area');
+    max_cell_size = max([cell_sizes.Area]);
+    min_cell_size = mean([cell_sizes.Area])/10; 
+    I = bwareafilt(I,[min_cell_size max_cell_size],4);
     if smalloff_flag > 1
         figure, imshow(I);
         if smalloff_flag > 2
             saveas(gcf,fullfile(analysis_foldername, sprintf('00%d-binary_WOSmall.tif',j)));
         end
     end
-    clear cell_areas  max_size min_size
+    clear cell_sizes  max_cell_size min_cell_size
 else
     warning("Very small cells are usually the result of issues during the segmentation process.")
 end
 
 %% find label and visualize all connected components = cells
 if cc_flag > 0
-    cc = bwconncomp(I);
-    labeled = labelmatrix(cc);
+    cc = bwconncomp(I,4); % Using connectivity 4, we can have 1px borders
+    labeled_cells = labelmatrix(cc);
     if cc_flag > 1
-        cc_RGBlabel = label2rgb(labeled, @spring, 'c', 'shuffle');
+        cc_RGBlabel = label2rgb(labeled_cells, @spring, 'c', 'shuffle');
         figure, imshow(cc_RGBlabel);
         title('connected components');
         if cc_flag > 2
@@ -95,143 +100,211 @@ if cc_flag > 0
     end
 end
 
-%% extract geometrical data from cells
+%% extract geometrical data from cells and applying the scaling if required
 if celldata_flag > 0
-    data = regionprops(cc,{...
+    cell_data = regionprops(cc,{...
         'Area',...
         'Perimeter',...
         'Centroid',...
         'MajorAxisLength',...
         'MinorAxisLength',...
         'Orientation'});
-    
-    % scaling data
-    scaling = mat2cell( [ ...
-        data.Perimeter; ...
-        data.MajorAxisLength; ...
-        data.MinorAxisLength; ...
-        reshape([data.Centroid],2,362); ...
-        data.Area ...
-        ]'*pixel_scale.*[ones(1,5) pixel_scale],ones(362,1),[1 1 1 2 1]);
-    [data.Perimeter, data.MajorAxisLength, data.MinorAxisLength, data.Centroid, data.Area] = scaling{:};
-end
-
-%% visualize one of the cells parameters
-
-mal = abs([data.Orientation]); %Plug in Orientation here.
-[~,idx] = histc(mal,0:90);  
-L = zeros(cc.ImageSize); %preallocate
-    for ii = 1:cc.NumObjects
-      L(cc.PixelIdxList{ii}) = idx(ii);    %fill in indices
+    if celldata_flag > 1
+        integer_orientation = zeros(cc.ImageSize);
+        integer_orientation(labeled_cells>0) = ceil(abs([cell_data(labeled_cells(labeled_cells>0)).Orientation]));
+        integer_orientationcc_RGBlabel = label2rgb(integer_orientation, parula(90));
+        figure, imshow(integer_orientationcc_RGBlabel);
+        caxis([0, 90]);
+        colorbar;
+        title('Cell orientation (°)');
+        if celldata_flag > 2
+            saveas(gcf,fullfile(analysis_foldername, sprintf('00%d-cell_orientation.tif',j)));
+        end
     end
-cmap = parula(90);  %a colormap
-Lrgb = label2rgb(L,cmap); %build rgb image
-figure;
-imshow(Lrgb);
-% imwrite(Lrgb, [ '00' num2str(j) '-cell-colors.bmp']);
-caxis([0, 90])
-colorbar;
-title('Cell orientation (°)');
+end
 
 %% Find adjacency matrix and graph
+if graph_flag > 0
+    dilated_labeled_cells = imdilate(labeled_cells,dilate_strel);
+%     cell_edges = imLabelEdges(dilated_labeled_cells);
+%     cell_edges_RGBlabel = label2rgb(cell_edges,parula(max(cell_edges,[],'all')));
+%     figure, imshow(cell_edges_RGBlabel);
+%     title('Edges');
+    
+    adjacency_matrix = zeros(max(dilated_labeled_cells,[],'all'));
+    for cell=1:cc.NumObjects
+        overlapping_pixels = immultiply(dilated_labeled_cells, imdilate(dilated_labeled_cells==cell, dilate_strel));
+        nz_overlapping_pixels = overlapping_pixels(overlapping_pixels~=0);
+        [GC,overlapping_cells] = groupcounts(nz_overlapping_pixels); % Removing contacts between cells that share very little space
+        gc_min = minimum_contact_length(mean([cell_data(cell).Perimeter]));
+        overlapping_cells = overlapping_cells(GC>gc_min);
+        adjacency_matrix(cell,overlapping_cells) = 1;
+    end
+    adjacency_matrix = adjacency_matrix | adjacency_matrix';
+    
+    g = graph(adjacency_matrix,'omitselfloops');
 
-dilateLabel = imdilate(labeled,dilate_strel);
-LBL = imLabelEdges(dilateLabel);
-% Show them
-cmap2 = parula(max(max(LBL)));
-LBLrgb = label2rgb(LBL,cmap2); %build rgb image
-% figure;
-% imshow(LBLrgb);
-% title('Edges');
+    cell_centroids = vertcat(cell_data.Centroid);
+    cells_xc = cell_centroids(:,1);
+    cells_yc = cell_centroids(:,2);
 
-adjacencyMatrix = zeros(max(max(dilateLabel)));
-N = double(max(dilateLabel(:)));
-for c=1:N
-    lbl = immultiply(dilateLabel, imdilate(dilateLabel==c, dilate_strel));
-    lbl = lbl(lbl~=0);
-    % Removing contacts between cells that share very little space
-    [GC,lbl] = groupcounts(lbl);
-    lbl = lbl(GC>gc_min);
-    %
-    adjacencyMatrix(c,lbl) = 1;
+    if graph_flag > 1
+        figure, imshow(I);
+        hold on
+        plot(g,'XData',cells_xc,'YData',cells_yc) 
+        if graph_flag > 2
+            saveas(gcf,fullfile(analysis_foldername, sprintf('00%d-adjacency_graph.tif',j)));
+        end
+    end
 end
-adjacencyMatrix = adjacencyMatrix | adjacencyMatrix';
 
-g = graph(adjacencyMatrix,'omitselfloops');
+%% Find cycles that have a certain topological charge
+if topocycles_flag > 0
+    [contact_cycles,edgecycles] = allcycles(g,'MaxCycleLength',max_cycle_elements,'MinCycleLength',min_cycle_elements);
 
-% remove
-xydata = vertcat(data.Centroid);
-xdata = xydata(:,1);
-ydata = xydata(:,2);
-figure
-imshow(K);
-hold on
-plot(g,'XData',xdata,'YData',ydata) 
-% remove
+    cell_centroids_cell = {cell_data.Centroid}';
+    cycle_centroids_cell = cell_centroids_cell(cell2mat(contact_cycles)); 
+    cycle_centroids_cell = mat2cell(cell2mat(cycle_centroids_cell),ones(size(cycle_centroids_cell,1),1),2*max_cycle_elements);
 
-% warning('off')
-[cycles,edgecycles] = allcycles(g,'MaxCycleLength',max_cycle_elements,'MinCycleLength',min_cycle_elements);
-% warning('on')
+    % remove complex polygons
+    if complexpoloff_flag > 0
+        complex_pol_index = @(cycle_xy) polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).NumRegions;
+        complex_pol_indices = cellfun(complex_pol_index,cycle_centroids_cell);
+        contact_cycles = contact_cycles(complex_pol_indices == 1);
+        edgecycles = edgecycles(complex_pol_indices == 1);
+        cycle_centroids_cell = cycle_centroids_cell(complex_pol_indices == 1);
+    end
 
-xydata_cell = {data.Centroid}';
-xycycle_cell = xydata_cell(cell2mat(cycles)); 
-xycycle_cell = mat2cell(cell2mat(xycycle_cell),ones(size(xycycle_cell,1),1),2*max_cycle_elements);
+    % all cycles --> counter-clockwise
+    clockwise_index = @(cycle_xy) ispolycw(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)]));
+    clockwise_indices = cellfun(clockwise_index,cycle_centroids_cell);
+    ccw_cycle = @(cycle, cycle_xy) [flip(cycle)*clockwise_index(cycle_xy) + cycle*(1-clockwise_index(cycle_xy))];
+    contact_cycles = cellfun(ccw_cycle,contact_cycles,cycle_centroids_cell,'UniformOutput',false);
+    contact_edgecycles = cellfun(ccw_cycle,edgecycles,cycle_centroids_cell,'UniformOutput',false);
 
-% remove complex polygons
-complex_pol_index = @(cycle_xy) polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).NumRegions;
-complex_pol_indices = cellfun(complex_pol_index,xycycle_cell);
-cycles = cycles(complex_pol_indices == 1);
-edgecycles = edgecycles(complex_pol_indices == 1);
-xycycle_cell = xycycle_cell(complex_pol_indices == 1);
+    % Solidity and roundness filters
+    if (solidityfilter_flag > 0 || roundnessfilter_flag > 0)
+        % Solidity
+        solidity = @(cycle_xy)...
+            polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).area /...
+            polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).convhull.area;
+        solidities = cellfun(solidity,cycle_centroids_cell);
+        % Roundness
+        roundness = @(cycle_xy)...
+            4*pi*polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).area /...
+            (polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).perimeter)^2;
+        roundnesses = cellfun(roundness,cycle_centroids_cell);
 
-% sortedcycles
-clockwise_index = @(cycle_xy) ispolycw(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)]));
-clockwise_indices = cellfun(clockwise_index,xycycle_cell);
-ccw_cycle = @(cycle, cycle_xy) [flip(cycle)*clockwise_index(cycle_xy) + cycle*(1-clockwise_index(cycle_xy))];
-ccw_cycles = cellfun(ccw_cycle,cycles,xycycle_cell,'UniformOutput',false);
-ccw_edgecycles = cellfun(ccw_cycle,edgecycles,xycycle_cell,'UniformOutput',false);
+        contact_cycles = contact_cycles(logical((solidities > (0.9*logical(solidityfilter_flag))).*(roundnesses > (0.8*logical(roundnessfilter_flag)))));
+        contact_edgecycles = contact_edgecycles(logical((solidities > (0.9*logical(solidityfilter_flag))).*(roundnesses > (0.8*logical(roundnessfilter_flag)))));
+    end
 
-% solidity filter
-solidity = @(cycle_xy)...
-    polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).area /...
-    polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).convhull.area;
-solidities = cellfun(solidity,xycycle_cell);
-% solid_ccw_cycles = ccw_cycles(solidities > 0.9);
-% solid_ccw_edgecycles = ccw_edgecycles(solidities > 0.9);
+    topo_wrapper = @(cell_cycle) topological_charge(cell_cycle, cell_data);
 
-% roundness filter % AND SOLIDITY
-roundness = @(cycle_xy)...
-    4*pi*polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).area /...
-    (polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).perimeter)^2;
-roundnesses = cellfun(roundness,xycycle_cell);
-round_solid_ccw_cycles = ccw_cycles(logical((solidities > 0.9).*(roundnesses > 0.8)));
-round_solid_ccw_edgecycles = ccw_edgecycles(logical((solidities > 0.9).*(roundnesses > 0.8)));
+    topologicalCharges = cellfun(topo_wrapper,contact_cycles);
 
-topo_wrapper = @(cell_cycle) topological_charge(cell_cycle, data);
+    if (plusonedefs_flag > 0 || minusonedefs_flag > 0 || plushalfdefs_flag > 0 || minushalfdefs_flag > 0)
+        tiledfig = figure; % tiledlayout flow with cycles
+        singlefig = figure; % superimposed defect centers
+        imshow(I);
+    end
 
-topologicalCharges = cellfun(topo_wrapper,round_solid_ccw_cycles);
-plusOneDefs = find(topologicalCharges==1);
+    if plusonedefs_flag > 0
+        plus_one_defs = find(topologicalCharges==1);
+        plusone_x = mean(cells_xc(vertcat(contact_cycles{plus_one_defs}))');
+        plusone_y = mean(cells_yc(vertcat(contact_cycles{plus_one_defs}))');
+        if plusonedefs_flag > 1
+            % defect cycles plot
+            cmap3 = parula(length(plus_one_defs));
+            cmap3 = cmap3(randperm(size(cmap3, 1)), :);
+            figure(tiledfig)
+            nexttile, imshow(I);
+            hold on
+            for i = 1:length(plus_one_defs)
+                highlight(plot(g,'XData',cells_xc,'YData',cells_yc,'EdgeColor','#0072BD','NodeColor','#0072BD'),'Edges',contact_edgecycles{plus_one_defs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
+            end
+            hold off
+            title("Defects: +1")
+            % defect centers plot
+            figure(singlefig)
+            hold on
+            plot(plusone_x,plusone_y,'Marker','o','MarkerSize',10,'MarkerFaceColor','#EDB120','MarkerEdgeColor','#EDB120','LineStyle','none')
+            hold off
+        end
+    end
 
-cmap3 = parula(length(plusOneDefs));
-cmap3 = cmap3(randperm(size(cmap3, 1)), :);
+    if minusonedefs_flag > 0
+        minus_one_defs = find(topologicalCharges==-1);
+        minusone_x = mean(cells_xc(vertcat(contact_cycles{minus_one_defs}))');
+        minusone_y = mean(cells_yc(vertcat(contact_cycles{minus_one_defs}))');
+        if minusonedefs_flag > 1
+            % defect cycles plot
+            cmap3 = parula(length(minus_one_defs));
+            cmap3 = cmap3(randperm(size(cmap3, 1)), :);
+            figure(tiledfig)
+            nexttile, imshow(I);
+            hold on
+            for i = 1:length(minus_one_defs)
+                highlight(plot(g,'XData',cells_xc,'YData',cells_yc,'EdgeColor','#0072BD','NodeColor','#0072BD'),'Edges',contact_edgecycles{minus_one_defs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
+            end
+            hold off
+            title("Defects: -1")
+            % defect centers plot
+            figure(singlefig)
+            hold on
+            plot(minusone_x,minusone_y,'Marker','o','MarkerSize',10,'MarkerFaceColor','#77AC30','MarkerEdgeColor','#77AC30','LineStyle','none')
+            hold off
+        end
+    end
 
-figure
-% tiledlayout flow
-imshow(K);
-hold on
+    if plushalfdefs_flag > 0
+        plus_half_defs = find(topologicalCharges==0.5);
+        plushalf_x = mean(cells_xc(vertcat(contact_cycles{plus_half_defs}))');
+        plushalf_y = mean(cells_yc(vertcat(contact_cycles{plus_half_defs}))');
+        if plushalfdefs_flag > 1
+            % defect cycles plot
+            cmap3 = parula(length(plus_half_defs));
+            cmap3 = cmap3(randperm(size(cmap3, 1)), :);
+            figure(tiledfig)
+            nexttile, imshow(I);
+            hold on
+            for i = 1:length(plus_half_defs)
+                highlight(plot(g,'XData',cells_xc,'YData',cells_yc,'EdgeColor','#0072BD','NodeColor','#0072BD'),'Edges',contact_edgecycles{plus_half_defs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
+            end
+            hold off
+            title("Defects: +1/2")
+            % defect centers plot
+            figure(singlefig)
+            hold on
+            plot(plushalf_x,plushalf_y,'Marker','o','MarkerSize',10,'MarkerFaceColor','#0072BD','MarkerEdgeColor','#0072BD','LineStyle','none')
+            hold off
+        end
+    end
 
-for i = 1:length(plusOneDefs)
-%     nexttile
-%     imshow(K)
-%     hold on
-    highlight(plot(g,'XData',xdata,'YData',ydata,'EdgeColor','#0072BD','NodeColor','#0072BD'),'Edges',round_solid_ccw_edgecycles{plusOneDefs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
-%     title("Defect " + i)
-%     labels = {'1','2','3','4','5','6','7','8'};
-%     plot(xdata(solid_ccw_cycles{plusOneDefs(i)}),ydata(solid_ccw_cycles{plusOneDefs(i)}),'Marker','.','MarkerSize',6,'MarkerFaceColor','r')
-%     text(xdata(solid_ccw_cycles{plusOneDefs(i)}),ydata(solid_ccw_cycles{plusOneDefs(i)}),labels,'VerticalAlignment','bottom','HorizontalAlignment','right')
-%     xmean = mean(xdata(solid_ccw_cycles{plusOneDefs(i)}));
-%     ymean = mean(ydata(solid_ccw_cycles{plusOneDefs(i)}));
-%     plot(xmean,ymean,'Marker','*','MarkerSize',6,'MarkerFaceColor','r')
+    if minushalfdefs_flag > 0
+        minus_half_defs = find(topologicalCharges==-0.5);
+        minushalf_x = mean(cells_xc(vertcat(contact_cycles{minus_half_defs}))');
+        minushalf_y = mean(cells_yc(vertcat(contact_cycles{minus_half_defs}))');
+        if minushalfdefs_flag > 1
+            % defect cycles plot
+            cmap3 = parula(length(minus_half_defs));
+            cmap3 = cmap3(randperm(size(cmap3, 1)), :);
+            figure(tiledfig)
+            nexttile, imshow(I);
+            hold on
+            for i = 1:length(minus_half_defs)
+                highlight(plot(g,'XData',cells_xc,'YData',cells_yc,'EdgeColor','#0072BD','NodeColor','#0072BD'),'Edges',contact_edgecycles{minus_half_defs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
+            end
+            hold off
+            title("Defects: -1/2")
+            % defect centers plot
+            figure(singlefig)
+            hold on
+            plot(minushalf_x,minushalf_y,'Marker','o','MarkerSize',10,'MarkerFaceColor','#7E2F8E','MarkerEdgeColor','#7E2F8E','LineStyle','none')
+            hold off
+        end
+    end
+
 end
 
 %% ellipse visualization thanks to its parametric equation superimposed to original image
@@ -240,12 +313,12 @@ imshow(K);
 
 t = linspace(0,2*pi,50);
 hold on
-for k = 1:length(data)
-    a = data (k).MajorAxisLength/2;
-    b = data (k).MinorAxisLength/2;
-    Xc = data (k).Centroid(1);
-    Yc = data (k).Centroid(2);
-    phi = deg2rad(-data(k).Orientation);
+for k = 1:length(cell_data)
+    a = cell_data (k).MajorAxisLength/2;
+    b = cell_data (k).MinorAxisLength/2;
+    Xc = cell_data (k).Centroid(1);
+    Yc = cell_data (k).Centroid(2);
+    phi = deg2rad(-cell_data(k).Orientation);
     x = Xc + a*cos(t)*cos(phi) - b*sin(t)*sin(phi);
     y = Yc + a*cos(t)*sin(phi) + b*sin(t)*cos(phi);
     plot(x,y,'b','Linewidth',2);
@@ -257,12 +330,12 @@ figure;
 imshow(K);
 
 hold on
-for k = 1:length(data)
+for k = 1:length(cell_data)
     vlength = cell_major_axis(k);
     t = linspace(-vlength/2,vlength/2,3);
-    Xc = data(k).Centroid(1);
-    Yc = data(k).Centroid(2);
-    phi = deg2rad(-data(k).Orientation);
+    Xc = cell_data(k).Centroid(1);
+    Yc = cell_data(k).Centroid(2);
+    phi = deg2rad(-cell_data(k).Orientation);
     x = Xc + t*cos(phi);
     y = Yc + t*sin(phi);
     plot(x,y,'b','Linewidth',2);
@@ -292,7 +365,7 @@ for k = 1:length(xcoords)
         Xc = X(h,k);
         Yc = Y(h,k);
         pixelindex = ((k-1)*ystep+vlength/2)*470 + (h-1)*xstep + vlength/2;
-        for i = 1:length(data)
+        for i = 1:length(cell_data)
           cellindex = i*ismember([pixelindex],[cc.PixelIdxList{i}]);
               if cellindex > 0
                   break
@@ -311,7 +384,7 @@ for k = 1:length(xcoords)
                 pixelindexmat(:,col) = pixelindexmat(:,col) - (checksize-col+1);
                 pixelindexmat(:,1+2*checksize-col+1) = pixelindexmat(:,1+2*checksize-col+1) + (checksize-col+1);
             end
-            for i = 1:length(data)
+            for i = 1:length(cell_data)
                 cellindexmat = cellindexmat + i*ismember([pixelindexmat],[cc.PixelIdxList{i}]);
             end
             if any(any(cellindexmat))
@@ -322,7 +395,7 @@ for k = 1:length(xcoords)
         if cellindex < 1
             plot(Xc,Yc,'.','Color','g');
         else 
-            phi = deg2rad(-data(cellindex).Orientation);
+            phi = deg2rad(-cell_data(cellindex).Orientation);
             phimat(h,k) = phi;
             phimat(phimat == 0) = NaN;
             x = Xc + t*cos(phi);
@@ -348,3 +421,5 @@ table_name=sprintf('00%d-CY5.csv',j);
 % writetable(table,table_name);
 
 clear *_flag
+% warning('off')
+% warning('on')
