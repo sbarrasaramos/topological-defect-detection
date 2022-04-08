@@ -6,6 +6,7 @@ clc;
 origin_filename = 'Mask2.tif'; % path + filename of the image/mask to be analyzed
 cell_color = 'Black'; 
 pixel_scale = 0.65; % conversion µm/pixel
+micrometers = 'off'; % "on" = working in microns; "off" or else = working in pixels
 dilate_strel = strel('diamond',1); % structuring element for dilation/erosion of binary images 
 minimum_contact_length = @(perimeter) 0.05*perimeter; % minimum shared area ¿in pixels? for cells to be in contact
 max_cycle_elements = 8; % maximum cycle size to look for in graphs
@@ -28,10 +29,10 @@ complexpoloff_flag = 1; % remove complex polygons
 solidityfilter_flag = 1; % solidity filter
 roundnessfilter_flag = 1; % roundness filter
 naive_flag = 0; % naive on = convexhull
-plusonedefs_flag = 2; % Look for +1 defects
-minusonedefs_flag = 2; % Look for -1 defects
-plushalfdefs_flag = 2; % Look for +1/2 defects
-minushalfdefs_flag = 2; % Look for -1/2 defects
+plusonedefs_flag = 3; % Look for +1 defects
+minusonedefs_flag = 3; % Look for -1 defects
+plushalfdefs_flag = 3; % Look for +1/2 defects
+minushalfdefs_flag = 3; % Look for -1/2 defects
 
 % visualize ellipses superimposed to original image
 % visualize orientation vectors superimposed to original image
@@ -109,6 +110,19 @@ if celldata_flag > 0
         'MajorAxisLength',...
         'MinorAxisLength',...
         'Orientation'});
+    switch lower(micrometers)
+        case 'on' % scaling data
+            scaling = mat2cell( [ ...
+                data.Perimeter; ...
+                data.MajorAxisLength; ...
+                data.MinorAxisLength; ...
+                vertcat(cell_data.Centroid)'; ...
+                data.Area ...
+                ]'*pixel_scale.*[ones(1,5) pixel_scale],ones(cc.NumObjects,1),[1 1 1 2 1]);
+        [data.Perimeter, data.MajorAxisLength, data.MinorAxisLength, data.Centroid, data.Area] = scaling{:};
+        otherwise
+            warning('Pixels are not necessarily comparable between units. This should not affect orientation or graphs')
+    end
     if celldata_flag > 1
         integer_orientation = zeros(cc.ImageSize);
         integer_orientation(labeled_cells>0) = ceil(abs([cell_data(labeled_cells(labeled_cells>0)).Orientation]));
