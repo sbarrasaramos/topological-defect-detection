@@ -22,7 +22,7 @@ borderoff_flag = 1; % erase cells at the borders
 smalloff_flag = 1; % erase small components
 cc_flag = 1; % find all connected components = cells
 celldata_flag = 2; % extract geometrical data from cells and visualize orientation
-orientation_plottype = 'Major_axis'; % choose how to show cell orientation: 'colormap', 'ellipse', 'major_axis'
+orientation_plottype = 'Color'; % choose how to show cell orientation: 'colormap', 'ellipse', 'major_axis'
 graph_flag = 1; % find adjacency matrix and graph
 topocycles_flag = 1; % find cycles that have a certain topological charge
 complexpoloff_flag = 1; % remove complex polygons
@@ -344,74 +344,6 @@ if topocycles_flag > 0
     end
 
 end
-
-% Structured orientation vector visualization superimposed to original image
-figure;
-imshow(K);
-vlength = 14;
-xstep = 18;
-ystep = 18;
-xcoords = 0:xstep:475;
-xcoords = xcoords + vlength/2;
-ycoords = 0:ystep:470; %475
-ycoords = ycoords + vlength/2;
-[X,Y] = meshgrid(xcoords,ycoords);
-phimat = zeros(length(ycoords),length(xcoords));
-
-hold on
-for k = 1:length(xcoords)
-    for h = 1:length(ycoords)
-        angle_distribution = linspace(-vlength/2,vlength/2,3);
-        Xc = X(h,k);
-        Yc = Y(h,k);
-        pixelindex = ((k-1)*ystep+vlength/2)*470 + (h-1)*xstep + vlength/2;
-        for i = 1:length(cell_data)
-          cellindex = i*ismember([pixelindex],[cc.PixelIdxList{i}]);
-              if cellindex > 0
-                  break
-              end
-        end
-        if cellindex < 1
-            checksize = 5;
-            pixelindexmat = zeros(1+2*checksize);
-            cellindexmat = zeros(1+2*checksize);
-            pixelindexmat(1+checksize,:) = pixelindex;
-            for row = 1:checksize
-                pixelindexmat(row,:) = pixelindex - 470*(checksize-row+1);
-                pixelindexmat(1+2*checksize-row+1,:) = pixelindex + 470*(checksize-row+1);
-            end
-            for col = 1:checksize
-                pixelindexmat(:,col) = pixelindexmat(:,col) - (checksize-col+1);
-                pixelindexmat(:,1+2*checksize-col+1) = pixelindexmat(:,1+2*checksize-col+1) + (checksize-col+1);
-            end
-            for i = 1:length(cell_data)
-                cellindexmat = cellindexmat + i*ismember([pixelindexmat],[cc.PixelIdxList{i}]);
-            end
-            if any(any(cellindexmat))
-                cellindexmat(cellindexmat == 0) = NaN;
-                cellindex = mode(cellindexmat, "all");
-            end           
-        end
-        if cellindex < 1
-            plot(Xc,Yc,'.','Color','g');
-        else 
-            phi = deg2rad(-cell_data(cellindex).Orientation);
-            phimat(h,k) = phi;
-            phimat(phimat == 0) = NaN;
-            x = Xc + angle_distribution*cos(phi);
-            y = Yc + angle_distribution*sin(phi);
-            plot(x,y,'r','Linewidth',2);
-        end
-    end
-end
-hold off
-grid on
-xticks(0:20:500)
-yticks(0:20:500)
-
-%% Saving pictures
-name_picture=sprintf('00%d-Colors.tif',j);
-saveas(gcf,name_picture);
 
 %% calculations Shape Index
 table.SI = 4 *pi* table.Area ./ (table.Perimeter.^2);
