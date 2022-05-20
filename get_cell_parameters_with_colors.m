@@ -5,9 +5,9 @@ clc;
 %% parameters
 origin_filename = 'Mask2.tif'; % path + filename of the image/mask to be analyzed
 cell_color = 'Black'; 
-pixel_scale = 0.65; % conversion µm/pixel
+pixel_scale = 0.65; % conversion Âµm/pixel
 dilate_strel = strel('diamond',1); % structuring element for dilation/erosion of binary images 
-minimum_contact_length = @(perimeter) 0.05*perimeter; % minimum shared area ¿in pixels? for cells to be in contact
+minimum_contact_length = @(perimeter) 0.05*perimeter; % minimum shared area Â¿in pixels? for cells to be in contact
 max_cycle_elements = 8; % maximum cycle size to look for in graphs
 min_cycle_elements = 8; % minimum cycle size to look for in graphs
 j=1; % number corresponding to the image (for file naming purposes)
@@ -116,7 +116,7 @@ if celldata_flag > 0
                 figure, imshow(integer_orientationcc_RGBlabel);
                 caxis([0, 90]);
                 colorbar;
-                title('Cell orientation (°)');
+                title('Cell orientation (Â°)');
             case 'ellipse'
                 angle_distribution = linspace(0,2*pi,50);
                 cellprops = mat2cell( [ ...
@@ -344,6 +344,44 @@ if topocycles_flag > 0
     end
 
 end
+
+%% ellipse visualization thanks to its parametric equation superimposed to original image
+figure;
+imshow(K);
+
+t = linspace(0,2*pi,50);
+hold on
+for k = 1:length(cell_data)
+    a = cell_data (k).MajorAxisLength/2;
+    b = cell_data (k).MinorAxisLength/2;
+    Xc = cell_data (k).Centroid(1);
+    Yc = cell_data (k).Centroid(2);
+    phi = deg2rad(-cell_data(k).Orientation);
+    x = Xc + a*cos(t)*cos(phi) - b*sin(t)*sin(phi);
+    y = Yc + a*cos(t)*sin(phi) + b*sin(t)*cos(phi);
+    plot(x,y,'b','Linewidth',2);
+end
+hold off
+
+%% Orientation vector visualization superimposed to original image
+figure;
+imshow(K);
+
+hold on
+for k = 1:length(cell_data)
+    vlength = cell_major_axis(k);
+    t = linspace(-vlength/2,vlength/2,3);
+    Xc = cell_data(k).Centroid(1);
+    Yc = cell_data(k).Centroid(2);
+    phi = deg2rad(-cell_data(k).Orientation);
+    x = Xc + t*cos(phi);
+    y = Yc + t*sin(phi);
+    plot(x,y,'b','Linewidth',2);
+end
+hold off
+grid on
+xticks(0:10:500)
+yticks(0:10:500)
 
 clear *_flag
 % warning('off')
