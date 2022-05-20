@@ -1,2 +1,6 @@
 # ignore matlab autosave file
 get_cell_parameters_with_colors.asv
+
+# ignore analysis folders
+*/
+
