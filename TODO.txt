@@ -1,0 +1,5 @@
+# Improve variable names
+# Check the creation and use of table
+# cmap creation function
+# structured orientation vector... to another file/branch
+# create cases for plots
