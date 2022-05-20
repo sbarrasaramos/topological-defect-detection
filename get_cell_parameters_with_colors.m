@@ -17,14 +17,14 @@ analysis_foldername = extractBefore(origin_filename,'.');
 [status, msg, msgID] = mkdir(analysis_foldername);
 
 %% flags --> 0 = off; 1 = on; 2 = on + plot; 3 (or >) = on + plot + save
-image2binary_flag = 1; % load image, binarize it and invert it if necessary
-borderoff_flag = 1; % erase cells at the borders 
-smalloff_flag = 1; % erase small components
-cc_flag = 1; % find all connected components = cells
-celldata_flag = 2; % extract geometrical data from cells and visualize orientation
-orientation_plottype = 'Color'; % choose how to show cell orientation: 'colormap', 'ellipse', 'major_axis'
-graph_flag = 1; % find adjacency matrix and graph
-topocycles_flag = 1; % find cycles that have a certain topological charge
+image2binary_flag = 3; % load image, binarize it and invert it if necessary
+borderoff_flag = 3; % erase cells at the borders 
+smalloff_flag = 3; % erase small components
+cc_flag = 3; % find all connected components = cells
+celldata_flag = 3; % extract geometrical data from cells and visualize orientation
+orientation_plottype = 'Colormap'; % choose how to show cell orientation: 'colormap', 'ellipse', 'major_axis'
+graph_flag = 3; % find adjacency matrix and graph
+topocycles_flag = 3; % find cycles that have a certain topological charge
 complexpoloff_flag = 1; % remove complex polygons
 solidityfilter_flag = 1; % solidity filter
 roundnessfilter_flag = 1; % roundness filter
@@ -232,7 +232,7 @@ if topocycles_flag > 0
         contact_edgecycles = contact_edgecycles(logical((solidities > (0.9*logical(solidityfilter_flag))).*(roundnesses > (0.8*logical(roundnessfilter_flag)))));
     end
 
-    topo_wrapper = @(cell_cycle) topological_charge(cell_cycle, cell_data);
+    topo_wrapper = @(cell_cycle) topological_charge_naive(cell_cycle, cell_data);
 
     topologicalCharges = cellfun(topo_wrapper,contact_cycles);
 
@@ -344,13 +344,6 @@ if topocycles_flag > 0
     end
 
 end
-
-%% calculations Shape Index
-table.SI = 4 *pi* table.Area ./ (table.Perimeter.^2);
-table.SIjamming = table.Perimeter./sqrt(table.Area);
-
-table_name=sprintf('00%d-CY5.csv',j);
-% writetable(table,table_name);
 
 clear *_flag
 % warning('off')
