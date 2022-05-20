@@ -5,9 +5,9 @@ clc;
 %% parameters
 origin_filename = 'Mask2.tif'; % path + filename of the image/mask to be analyzed
 cell_color = 'Black'; 
-pixel_scale = 0.65; % conversion µm/pixel
+pixel_scale = 0.65; % conversion Âµm/pixel
 dilate_strel = strel('diamond',1); % structuring element for dilation/erosion of binary images 
-minimum_contact_length = @(perimeter) 0.05*perimeter; % minimum shared area ¿in pixels? for cells to be in contact
+minimum_contact_length = @(perimeter) 0.05*perimeter; % minimum shared area Â¿in pixels? for cells to be in contact
 max_cycle_elements = 8; % maximum cycle size to look for in graphs
 min_cycle_elements = 8; % minimum cycle size to look for in graphs
 j=1; % number corresponding to the image (for file naming purposes)
@@ -17,24 +17,22 @@ analysis_foldername = extractBefore(origin_filename,'.');
 [status, msg, msgID] = mkdir(analysis_foldername);
 
 %% flags --> 0 = off; 1 = on; 2 = on + plot; 3 (or >) = on + plot + save
-image2binary_flag = 1; % load image, binarize it and invert it if necessary
-borderoff_flag = 1; % erase cells at the borders 
-smalloff_flag = 1; % erase small components
-cc_flag = 1; % find all connected components = cells
-celldata_flag = 1; % extract geometrical data from cells and visualize orientation
-graph_flag = 1; % find adjacency matrix and graph
-topocycles_flag = 1; % find cycles that have a certain topological charge
+image2binary_flag = 3; % load image, binarize it and invert it if necessary
+borderoff_flag = 3; % erase cells at the borders 
+smalloff_flag = 3; % erase small components
+cc_flag = 3; % find all connected components = cells
+celldata_flag = 3; % extract geometrical data from cells and visualize orientation
+orientation_plottype = 'Colormap'; % choose how to show cell orientation: 'colormap', 'ellipse', 'major_axis'
+graph_flag = 3; % find adjacency matrix and graph
+topocycles_flag = 3; % find cycles that have a certain topological charge
 complexpoloff_flag = 1; % remove complex polygons
 solidityfilter_flag = 1; % solidity filter
 roundnessfilter_flag = 1; % roundness filter
 naive_flag = 0; % naive on = convexhull
-plusonedefs_flag = 2; % Look for +1 defects
-minusonedefs_flag = 2; % Look for -1 defects
-plushalfdefs_flag = 2; % Look for +1/2 defects
-minushalfdefs_flag = 2; % Look for -1/2 defects
-
-% visualize ellipses superimposed to original image
-% visualize orientation vectors superimposed to original image
+plusonedefs_flag = 3; % Look for +1 defects
+minusonedefs_flag = 3; % Look for -1 defects
+plushalfdefs_flag = 3; % Look for +1/2 defects
+minushalfdefs_flag = 3; % Look for -1/2 defects
 
 %% load image, binarize it and invert it if necessary
 if image2binary_flag > 0
@@ -110,13 +108,48 @@ if celldata_flag > 0
         'MinorAxisLength',...
         'Orientation'});
     if celldata_flag > 1
-        integer_orientation = zeros(cc.ImageSize);
-        integer_orientation(labeled_cells>0) = ceil(abs([cell_data(labeled_cells(labeled_cells>0)).Orientation]));
-        integer_orientationcc_RGBlabel = label2rgb(integer_orientation, parula(90));
-        figure, imshow(integer_orientationcc_RGBlabel);
-        caxis([0, 90]);
-        colorbar;
-        title('Cell orientation (°)');
+        switch lower(orientation_plottype)
+            case 'colormap'
+                integer_orientation = zeros(cc.ImageSize);
+                integer_orientation(labeled_cells>0) = ceil(abs([cell_data(labeled_cells(labeled_cells>0)).Orientation]));
+                integer_orientationcc_RGBlabel = label2rgb(integer_orientation, parula(90));
+                figure, imshow(integer_orientationcc_RGBlabel);
+                caxis([0, 90]);
+                colorbar;
+                title('Cell orientation (Â°)');
+            case 'ellipse'
+                angle_distribution = linspace(0,2*pi,50);
+                cellprops = mat2cell( [ ...
+                    cell_data.Orientation; ...
+                    cell_data.MajorAxisLength; ...
+                    cell_data.MinorAxisLength; ...
+                    vertcat(cell_data.Centroid)'; ...
+                    ]',ones(cc.NumObjects,1),[5]);
+                ellipse_calculator = @(cell_properties) [
+                    cell_properties(4) + cell_properties(2)*cos(angle_distribution)*cosd(-cell_properties(1))/2 - cell_properties(3)*sin(angle_distribution)*sind(-cell_properties(1))/2;
+                    cell_properties(5) + cell_properties(2)*cos(angle_distribution)*sind(-cell_properties(1))/2 + cell_properties(3)*sin(angle_distribution)*cosd(-cell_properties(1))/2]';
+                ellipses = cellfun(ellipse_calculator,cellprops,'UniformOutput',false);
+                figure, imshow(I);
+                hold on 
+                plot(getcolumn([ellipses{:}],1:2:2*cc.NumObjects),getcolumn([ellipses{:}],2:2:2*cc.NumObjects),'b','Linewidth',2);
+            case 'major_axis'
+                cellprops = mat2cell( [ ...
+                    cell_data.Orientation; ...
+                    cell_data.MajorAxisLength; ...
+                    cell_data.MinorAxisLength; ...
+                    vertcat(cell_data.Centroid)'; ...
+                    ]',ones(cc.NumObjects,1),[5]);
+                axis_calculator = @(cell_properties) [
+                    cell_properties(4) + 0.8*linspace(-cell_properties(2)/2,cell_properties(2)/2,3)*cosd(-cell_properties(1)); 
+                    cell_properties(5) + 0.8*linspace(-cell_properties(2)/2,cell_properties(2)/2,3)*sind(-cell_properties(1))]';
+                axis = cellfun(axis_calculator,cellprops,'UniformOutput',false);
+                figure, ax = axes; imshow(I);
+                hold on
+                plot(getcolumn([axis{:}],1:2:2*cc.NumObjects),getcolumn([axis{:}],2:2:2*cc.NumObjects),'b','Linewidth',2);
+            otherwise
+                disp('This option is not available and it will not be plotted or saved')
+        end
+        
         if celldata_flag > 2
             saveas(gcf,fullfile(analysis_foldername, sprintf('00%d-cell_orientation.tif',j)));
         end
@@ -203,7 +236,7 @@ if topocycles_flag > 0
 
     topologicalCharges = cellfun(topo_wrapper,contact_cycles);
 
-    if (plusonedefs_flag > 0 || minusonedefs_flag > 0 || plushalfdefs_flag > 0 || minushalfdefs_flag > 0)
+    if (plusonedefs_flag > 1 || minusonedefs_flag > 1 || plushalfdefs_flag > 1 || minushalfdefs_flag > 1)
         tiledfig = figure; % tiledlayout flow with cycles
         singlefig = figure; % superimposed defect centers
         imshow(I);
@@ -349,17 +382,6 @@ hold off
 grid on
 xticks(0:10:500)
 yticks(0:10:500)
-
-%% Saving pictures
-name_picture=sprintf('00%d-Colors.tif',j);
-saveas(gcf,name_picture);
-
-%% calculations Shape Index
-table.SI = 4 *pi* table.Area ./ (table.Perimeter.^2);
-table.SIjamming = table.Perimeter./sqrt(table.Area);
-
-table_name=sprintf('00%d-CY5.csv',j);
-% writetable(table,table_name);
 
 clear *_flag
 % warning('off')
