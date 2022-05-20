@@ -232,7 +232,7 @@ if topocycles_flag > 0
         contact_edgecycles = contact_edgecycles(logical((solidities > (0.9*logical(solidityfilter_flag))).*(roundnesses > (0.8*logical(roundnessfilter_flag)))));
     end
 
-    topo_wrapper = @(cell_cycle) topological_charge_naive(cell_cycle, cell_data);
+    topo_wrapper = @(cell_cycle) topological_charge(cell_cycle, cell_data);
 
     topologicalCharges = cellfun(topo_wrapper,contact_cycles);
 
