@@ -47,18 +47,7 @@ I = borderoff(borderoff_flag, I, analysis_foldername);
 I = smalloff(smalloff_flag, I, analysis_foldername);
 
 %% find label and visualize all connected components = cells
-if cc_flag > 0
-    cc = bwconncomp(I,4); % Using connectivity 4, we can have 1px borders
-    labeled_cells = labelmatrix(cc);
-    if cc_flag > 1
-        cc_RGBlabel = label2rgb(labeled_cells, @spring, 'c', 'shuffle');
-        figure, imshow(cc_RGBlabel);
-        title('connected components');
-        if cc_flag > 2
-            saveas(gcf,fullfile(analysis_foldername, sprintf('00%d-connected_components.tif',j)));
-        end
-    end
-end
+cc = connectedcomp(cc_flag, I);
 
 %% extract geometrical data from cells and applying the scaling if required
 if celldata_flag > 0
