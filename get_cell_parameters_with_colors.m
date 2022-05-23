@@ -41,17 +41,7 @@ minushalfdefs_flag = 3; % Look for -1/2 defects
 I = image2binary(image2binary_flag, origin_filename, analysis_foldername, cell_color);
 
 %% erase cells at the borders 
-if borderoff_flag > 0
-    I = imclearborder(I);
-    if borderoff_flag > 1
-        figure, imshow(I);
-        if borderoff_flag > 2
-            saveas(gcf,fullfile(analysis_foldername, sprintf('00%d-binary_WOEdges.tif',j)));
-        end
-    end
-else
-    warning("Parameters obtained from cells at the borders might result in biased or incorrect results.")
-end
+I = borderoff(borderoff_flag, I, analysis_foldername);
 
 %% erase small components and visualize binary image before and after filtering by size
 if smalloff_flag > 0
