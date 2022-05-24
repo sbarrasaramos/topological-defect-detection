@@ -1,4 +1,4 @@
-function I = borderoff(borderoff_flag, I, analysis_foldername) 
+function I = borderoff(borderoff_flag, I, analysis_foldername, j) 
     if borderoff_flag > 0
         I = imclearborder(I);
         if borderoff_flag > 1

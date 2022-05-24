@@ -1,4 +1,4 @@
-function cc = connectedcomp(cc_flag, I)
+function cc = connectedcomp(cc_flag, I, j)
     if cc_flag > 0
         cc = bwconncomp(I,4); % Using connectivity 4, we can have 1px borders
         labeled_cells = labelmatrix(cc);

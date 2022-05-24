@@ -1,4 +1,4 @@
-function I = image2binary(image2binary_flag, origin_filename, analysis_foldername, cell_color)
+function I = image2binary(image2binary_flag, origin_filename, analysis_foldername, cell_color, j)
     if image2binary_flag > 0
         I=imbinarize(imread(origin_filename));
         switch lower(cell_color)

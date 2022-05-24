@@ -38,18 +38,20 @@ minushalfdefs_flag = 3; % Look for -1/2 defects
 % visualize orientation vectors superimposed to original image
 
 %% load image, binarize it and invert it if necessary
-I = image2binary(image2binary_flag, origin_filename, analysis_foldername, cell_color);
+I = image2binary(image2binary_flag, origin_filename, analysis_foldername, cell_color, j);
 
 %% erase cells at the borders 
-I = borderoff(borderoff_flag, I, analysis_foldername);
+I = borderoff(borderoff_flag, I, analysis_foldername, j);
 
 %% erase small components and visualize binary image before and after filtering by size
-I = smalloff(smalloff_flag, I, analysis_foldername);
+I = smalloff(smalloff_flag, I, analysis_foldername, j);
 
 %% find label and visualize all connected components = cells
-cc = connectedcomp(cc_flag, I);
+cc = connectedcomp(cc_flag, I, j);
 
 %% extract geometrical data from cells and applying the scaling if required
+cell_data = celldata(celldata_flag, micrometers, cc, );
+
 if celldata_flag > 0
     cell_data = regionprops(cc,{...
         'Area',...
