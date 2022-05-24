@@ -22,12 +22,12 @@ image2binary_flag = 1; % load image, binarize it and invert it if necessary
 borderoff_flag = 1; % erase cells at the borders 
 smalloff_flag = 1; % erase small components
 cc_flag = 1; % find all connected components = cells
-celldata_flag = 1; % extract geometrical data from cells and visualize orientation
-graph_flag = 1; % find adjacency matrix and graph
+celldata_flag = 2; % extract geometrical data from cells and visualize orientation
+graph_flag = 2; % find adjacency matrix and graph
 topocycles_flag = 1; % find cycles that have a certain topological charge
 complexpoloff_flag = 1; % remove complex polygons
-solidityfilter_flag = 1; % solidity filter
-roundnessfilter_flag = 1; % roundness filter
+solidityfilter_flag = 0; % solidity filter
+roundnessfilter_flag = 0; % roundness filter
 naive_flag = 0; % naive on = convexhull
 plusonedefs_flag = 3; % Look for +1 defects
 minusonedefs_flag = 3; % Look for -1 defects
@@ -38,93 +38,26 @@ minushalfdefs_flag = 3; % Look for -1/2 defects
 % visualize orientation vectors superimposed to original image
 
 %% load image, binarize it and invert it if necessary
-I = image2binary(image2binary_flag, origin_filename, analysis_foldername, cell_color, j);
+[I, binary_fig] = image2binary(image2binary_flag, origin_filename, analysis_foldername, cell_color, j);
 
 %% erase cells at the borders 
-I = borderoff(borderoff_flag, I, analysis_foldername, j);
+[I, borderoff_fig] = borderoff(borderoff_flag, I, analysis_foldername, j);
 
 %% erase small components and visualize binary image before and after filtering by size
-I = smalloff(smalloff_flag, I, analysis_foldername, j);
+[I, smalloff_fig] = smalloff(smalloff_flag, I, analysis_foldername, j);
 
 %% find label and visualize all connected components = cells
-cc = connectedcomp(cc_flag, I, j);
+[cc, labeled_cells, labeledcells_fig] = connectedcomp(cc_flag, I, j);
 
 %% extract geometrical data from cells and applying the scaling if required
-cell_data = celldata(celldata_flag, micrometers, cc, );
-
-if celldata_flag > 0
-    cell_data = regionprops(cc,{...
-        'Area',...
-        'Perimeter',...
-        'Centroid',...
-        'MajorAxisLength',...
-        'MinorAxisLength',...
-        'Orientation'});
-    switch lower(micrometers)
-        case 'on' % scaling data
-            scaling = mat2cell( [ ...
-                data.Perimeter; ...
-                data.MajorAxisLength; ...
-                data.MinorAxisLength; ...
-                vertcat(cell_data.Centroid)'; ...
-                data.Area ...
-                ]'*pixel_scale.*[ones(1,5) pixel_scale],ones(cc.NumObjects,1),[1 1 1 2 1]);
-        [data.Perimeter, data.MajorAxisLength, data.MinorAxisLength, data.Centroid, data.Area] = scaling{:};
-        otherwise
-            warning('Pixels are not necessarily comparable between units. This should not affect orientation or graphs')
-    end
-    if celldata_flag > 1
-        integer_orientation = zeros(cc.ImageSize);
-        integer_orientation(labeled_cells>0) = ceil(abs([cell_data(labeled_cells(labeled_cells>0)).Orientation]));
-        integer_orientationcc_RGBlabel = label2rgb(integer_orientation, parula(90));
-        figure, imshow(integer_orientationcc_RGBlabel);
-        caxis([0, 90]);
-        colorbar;
-        title('Cell orientation (°)');
-        if celldata_flag > 2
-            saveas(gcf,fullfile(analysis_foldername, sprintf('00%d-cell_orientation.tif',j)));
-        end
-    end
-end
+[cell_data, cell_orientation_fig] = celldata(celldata_flag, micrometers, cc, labeled_cells, j);
 
 %% Find adjacency matrix and graph
-if graph_flag > 0
-    dilated_labeled_cells = imdilate(labeled_cells,dilate_strel);
-%     cell_edges = imLabelEdges(dilated_labeled_cells);
-%     cell_edges_RGBlabel = label2rgb(cell_edges,parula(max(cell_edges,[],'all')));
-%     figure, imshow(cell_edges_RGBlabel);
-%     title('Edges');
-    
-    adjacency_matrix = zeros(max(dilated_labeled_cells,[],'all'));
-    for cell=1:cc.NumObjects
-        overlapping_pixels = immultiply(dilated_labeled_cells, imdilate(dilated_labeled_cells==cell, dilate_strel));
-        nz_overlapping_pixels = overlapping_pixels(overlapping_pixels~=0);
-        [GC,overlapping_cells] = groupcounts(nz_overlapping_pixels); % Removing contacts between cells that share very little space
-        gc_min = minimum_contact_length(mean([cell_data(cell).Perimeter]));
-        overlapping_cells = overlapping_cells(GC>gc_min);
-        adjacency_matrix(cell,overlapping_cells) = 1;
-    end
-    adjacency_matrix = adjacency_matrix | adjacency_matrix';
-    
-    g = graph(adjacency_matrix,'omitselfloops');
-
-    cell_centroids = vertcat(cell_data.Centroid);
-    cells_xc = cell_centroids(:,1);
-    cells_yc = cell_centroids(:,2);
-
-    if graph_flag > 1
-        figure, imshow(I);
-        hold on
-        plot(g,'XData',cells_xc,'YData',cells_yc) 
-        if graph_flag > 2
-            saveas(gcf,fullfile(analysis_foldername, sprintf('00%d-adjacency_graph.tif',j)));
-        end
-    end
-end
+[connectivity_graph, connectivity_fig] = conngraph(graph_flag, cc, labeled_cells, dilate_strel, cell_data, minimum_contact_length, I, j);
 
 %% Find cycles that have a certain topological charge
 if topocycles_flag > 0
-    [contact_cycles,edgecycles] = allcycles(g,'MaxCycleLength',max_cycle_elements,'MinCycleLength',min_cycle_elements);
+    [contact_cycles,edgecycles] = allcycles(connectivity_graph,'MaxCycleLength',max_cycle_elements,'MinCycleLength',min_cycle_elements);
 
     cell_centroids_cell = {cell_data.Centroid}';
     cycle_centroids_cell = cell_centroids_cell(cell2mat(contact_cycles)); 
@@ -185,7 +118,7 @@ if topocycles_flag > 0
             nexttile, imshow(I);
             hold on
             for i = 1:length(plus_one_defs)
-                highlight(plot(g,'XData',cells_xc,'YData',cells_yc,'EdgeColor','#0072BD','NodeColor','#0072BD'),'Edges',contact_edgecycles{plus_one_defs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
+                highlight(plot(connectivity_graph,'XData',cells_xc,'YData',cells_yc,'EdgeColor','#0072BD','NodeColor','#0072BD'),'Edges',contact_edgecycles{plus_one_defs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
             end
             hold off
             title("Defects: +1")
@@ -209,7 +142,7 @@ if topocycles_flag > 0
             nexttile, imshow(I);
             hold on
             for i = 1:length(minus_one_defs)
-                highlight(plot(g,'XData',cells_xc,'YData',cells_yc,'EdgeColor','#0072BD','NodeColor','#0072BD'),'Edges',contact_edgecycles{minus_one_defs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
+                highlight(plot(connectivity_graph,'XData',cells_xc,'YData',cells_yc,'EdgeColor','#0072BD','NodeColor','#0072BD'),'Edges',contact_edgecycles{minus_one_defs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
             end
             hold off
             title("Defects: -1")
@@ -233,7 +166,7 @@ if topocycles_flag > 0
             nexttile, imshow(I);
             hold on
             for i = 1:length(plus_half_defs)
-                highlight(plot(g,'XData',cells_xc,'YData',cells_yc,'EdgeColor','#0072BD','NodeColor','#0072BD'),'Edges',contact_edgecycles{plus_half_defs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
+                highlight(plot(connectivity_graph,'XData',cells_xc,'YData',cells_yc,'EdgeColor','#0072BD','NodeColor','#0072BD'),'Edges',contact_edgecycles{plus_half_defs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
             end
             hold off
             title("Defects: +1/2")
@@ -257,7 +190,7 @@ if topocycles_flag > 0
             nexttile, imshow(I);
             hold on
             for i = 1:length(minus_half_defs)
-                highlight(plot(g,'XData',cells_xc,'YData',cells_yc,'EdgeColor','#0072BD','NodeColor','#0072BD'),'Edges',contact_edgecycles{minus_half_defs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
+                highlight(plot(connectivity_graph,'XData',cells_xc,'YData',cells_yc,'EdgeColor','#0072BD','NodeColor','#0072BD'),'Edges',contact_edgecycles{minus_half_defs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
             end
             hold off
             title("Defects: -1/2")

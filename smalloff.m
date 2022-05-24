@@ -1,11 +1,13 @@
-function I = smalloff(smalloff_flag, I, analysis_foldername, j) 
+function [I, fig] = smalloff(smalloff_flag, I, analysis_foldername, j) 
+    fig = 0;
     if smalloff_flag > 0
         cell_sizes = regionprops(I, 'Area');
         max_cell_size = max([cell_sizes.Area]);
         min_cell_size = mean([cell_sizes.Area])/10; 
         I = bwareafilt(I,[min_cell_size max_cell_size],4);
         if smalloff_flag > 1
-            figure, imshow(I);
+            fig = figure;
+            imshow(I);
             if smalloff_flag > 2
                 saveas(gcf,fullfile(analysis_foldername, sprintf('00%d-binary_WOSmall.tif',j)));
             end
