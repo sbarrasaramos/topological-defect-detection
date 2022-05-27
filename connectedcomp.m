@@ -1,5 +1,8 @@
-function [cc, labeled_cells, fig] = connectedcomp(cc_flag, I, j)
-fig = 0;
+function [cc, labeled_cells, fig] = connectedcomp(cc_flag)
+
+global I analysis_foldername j
+
+fig = nan;
     if cc_flag > 0
         cc = bwconncomp(I,4); % Using connectivity 4, we can have 1px borders
         labeled_cells = labelmatrix(cc);

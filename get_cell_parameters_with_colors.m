@@ -2,6 +2,8 @@ close all;
 clear all; 
 clc;
 
+global I analysis_foldername j
+
 %% parameters
 origin_filename = 'Mask2.tif'; % path + filename of the image/mask to be analyzed
 cell_color = 'Black'; 
@@ -23,191 +25,48 @@ borderoff_flag = 1; % erase cells at the borders
 smalloff_flag = 1; % erase small components
 cc_flag = 1; % find all connected components = cells
 celldata_flag = 2; % extract geometrical data from cells and visualize orientation
-graph_flag = 2; % find adjacency matrix and graph
+graph_flag = 1; % find adjacency matrix and graph
 topocycles_flag = 1; % find cycles that have a certain topological charge
 complexpoloff_flag = 1; % remove complex polygons
 solidityfilter_flag = 0; % solidity filter
 roundnessfilter_flag = 0; % roundness filter
 naive_flag = 0; % naive on = convexhull
-plusonedefs_flag = 3; % Look for +1 defects
-minusonedefs_flag = 3; % Look for -1 defects
-plushalfdefs_flag = 3; % Look for +1/2 defects
-minushalfdefs_flag = 3; % Look for -1/2 defects
+plusonedefs_flag = 2; % Look for +1 defects
+minusonedefs_flag = 2; % Look for -1 defects
+plushalfdefs_flag = 2; % Look for +1/2 defects
+minushalfdefs_flag = 2; % Look for -1/2 defects
 
 % visualize ellipses superimposed to original image
 % visualize orientation vectors superimposed to original image
 
 %% load image, binarize it and invert it if necessary
-[I, binary_fig] = image2binary(image2binary_flag, origin_filename, analysis_foldername, cell_color, j);
+[binary_fig] = image2binary(image2binary_flag, origin_filename, cell_color);
 
 %% erase cells at the borders 
-[I, borderoff_fig] = borderoff(borderoff_flag, I, analysis_foldername, j);
+[borderoff_fig] = borderoff(borderoff_flag);
 
 %% erase small components and visualize binary image before and after filtering by size
-[I, smalloff_fig] = smalloff(smalloff_flag, I, analysis_foldername, j);
+[smalloff_fig] = smalloff(smalloff_flag);
 
 %% find label and visualize all connected components = cells
-[cc, labeled_cells, labeledcells_fig] = connectedcomp(cc_flag, I, j);
+[cc, labeled_cells, labeledcells_fig] = connectedcomp(cc_flag);
 
 %% extract geometrical data from cells and applying the scaling if required
-[cell_data, cell_orientation_fig] = celldata(celldata_flag, micrometers, cc, labeled_cells, j);
+[cell_data, cell_orientation_fig] = celldata(celldata_flag, micrometers, cc, labeled_cells);
 
 %% Find adjacency matrix and graph
-[connectivity_graph, connectivity_fig] = conngraph(graph_flag, cc, labeled_cells, dilate_strel, cell_data, minimum_contact_length, I, j);
+[connectivity_graph, cells_xc, cells_yc, connectivity_fig] = conngraph(graph_flag, cc, labeled_cells, dilate_strel, cell_data, minimum_contact_length);
 
-%% Find cycles that have a certain topological charge
-if topocycles_flag > 0
-    [contact_cycles,edgecycles] = allcycles(connectivity_graph,'MaxCycleLength',max_cycle_elements,'MinCycleLength',min_cycle_elements);
+%% Find cycles that have a certain topological char ge
+[contact_cycles, edgecycles, topologicalCharges, tiledfig, singlefig, ...
+    plus_one_defs, plusone_x, plusone_y, ...
+    minus_one_defs, minusone_x, minusone_y, ...
+    plus_half_defs, plushalf_x, plushalf_y, ...
+    minus_half_defs, minushalf_x, minushalf_y] = topocycles( ...
+    topocycles_flag,topocycles_flag, solidityfilter_flag, roundnessfilter_flag, ...
+    plusonedefs_flag, minusonedefs_flag, plushalfdefs_flag, minushalfdefs_flag, ...
+    cell_data, connectivity_graph, max_cycle_elements, min_cycle_elements, cells_xc, cells_yc);
 
-    cell_centroids_cell = {cell_data.Centroid}';
-    cycle_centroids_cell = cell_centroids_cell(cell2mat(contact_cycles)); 
-    cycle_centroids_cell = mat2cell(cell2mat(cycle_centroids_cell),ones(size(cycle_centroids_cell,1),1),2*max_cycle_elements);
-
-    % remove complex polygons
-    if complexpoloff_flag > 0
-        complex_pol_index = @(cycle_xy) polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).NumRegions;
-        complex_pol_indices = cellfun(complex_pol_index,cycle_centroids_cell);
-        contact_cycles = contact_cycles(complex_pol_indices == 1);
-        edgecycles = edgecycles(complex_pol_indices == 1);
-        cycle_centroids_cell = cycle_centroids_cell(complex_pol_indices == 1);
-    end
-
-    % all cycles --> counter-clockwise
-    clockwise_index = @(cycle_xy) ispolycw(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)]));
-    clockwise_indices = cellfun(clockwise_index,cycle_centroids_cell);
-    ccw_cycle = @(cycle, cycle_xy) [flip(cycle)*clockwise_index(cycle_xy) + cycle*(1-clockwise_index(cycle_xy))];
-    contact_cycles = cellfun(ccw_cycle,contact_cycles,cycle_centroids_cell,'UniformOutput',false);
-    contact_edgecycles = cellfun(ccw_cycle,edgecycles,cycle_centroids_cell,'UniformOutput',false);
-
-    % Solidity and roundness filters
-    if (solidityfilter_flag > 0 || roundnessfilter_flag > 0)
-        % Solidity
-        solidity = @(cycle_xy)...
-            polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).area /...
-            polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).convhull.area;
-        solidities = cellfun(solidity,cycle_centroids_cell);
-        % Roundness
-        roundness = @(cycle_xy)...
-            4*pi*polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).area /...
-            (polyshape(cycle_xy([1:2:length(cycle_xy)]),cycle_xy([2:2:length(cycle_xy)])).perimeter)^2;
-        roundnesses = cellfun(roundness,cycle_centroids_cell);
-
-        contact_cycles = contact_cycles(logical((solidities > (0.9*logical(solidityfilter_flag))).*(roundnesses > (0.8*logical(roundnessfilter_flag)))));
-        contact_edgecycles = contact_edgecycles(logical((solidities > (0.9*logical(solidityfilter_flag))).*(roundnesses > (0.8*logical(roundnessfilter_flag)))));
-    end
-
-    topo_wrapper = @(cell_cycle) topological_charge(cell_cycle, cell_data);
-
-    topologicalCharges = cellfun(topo_wrapper,contact_cycles);
-
-    if (plusonedefs_flag > 0 || minusonedefs_flag > 0 || plushalfdefs_flag > 0 || minushalfdefs_flag > 0)
-        tiledfig = figure; % tiledlayout flow with cycles
-        singlefig = figure; % superimposed defect centers
-        imshow(I);
-    end
-
-    if plusonedefs_flag > 0
-        plus_one_defs = find(topologicalCharges==1);
-        plusone_x = mean(cells_xc(vertcat(contact_cycles{plus_one_defs}))');
-        plusone_y = mean(cells_yc(vertcat(contact_cycles{plus_one_defs}))');
-        if plusonedefs_flag > 1
-            % defect cycles plot
-            cmap3 = parula(length(plus_one_defs));
-            cmap3 = cmap3(randperm(size(cmap3, 1)), :);
-            figure(tiledfig)
-            nexttile, imshow(I);
-            hold on
-            for i = 1:length(plus_one_defs)
-                highlight(plot(connectivity_graph,'XData',cells_xc,'YData',cells_yc,'EdgeColor','#0072BD','NodeColor','#0072BD'),'Edges',contact_edgecycles{plus_one_defs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
-            end
-            hold off
-            title("Defects: +1")
-            % defect centers plot
-            figure(singlefig)
-            hold on
-            plot(plusone_x,plusone_y,'Marker','o','MarkerSize',10,'MarkerFaceColor','#EDB120','MarkerEdgeColor','#EDB120','LineStyle','none')
-            hold off
-        end
-    end
-
-    if minusonedefs_flag > 0
-        minus_one_defs = find(topologicalCharges==-1);
-        minusone_x = mean(cells_xc(vertcat(contact_cycles{minus_one_defs}))');
-        minusone_y = mean(cells_yc(vertcat(contact_cycles{minus_one_defs}))');
-        if minusonedefs_flag > 1
-            % defect cycles plot
-            cmap3 = parula(length(minus_one_defs));
-            cmap3 = cmap3(randperm(size(cmap3, 1)), :);
-            figure(tiledfig)
-            nexttile, imshow(I);
-            hold on
-            for i = 1:length(minus_one_defs)
-                highlight(plot(connectivity_graph,'XData',cells_xc,'YData',cells_yc,'EdgeColor','#0072BD','NodeColor','#0072BD'),'Edges',contact_edgecycles{minus_one_defs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
-            end
-            hold off
-            title("Defects: -1")
-            % defect centers plot
-            figure(singlefig)
-            hold on
-            plot(minusone_x,minusone_y,'Marker','o','MarkerSize',10,'MarkerFaceColor','#77AC30','MarkerEdgeColor','#77AC30','LineStyle','none')
-            hold off
-        end
-    end
-
-    if plushalfdefs_flag > 0
-        plus_half_defs = find(topologicalCharges==0.5);
-        plushalf_x = mean(cells_xc(vertcat(contact_cycles{plus_half_defs}))');
-        plushalf_y = mean(cells_yc(vertcat(contact_cycles{plus_half_defs}))');
-        if plushalfdefs_flag > 1
-            % defect cycles plot
-            cmap3 = parula(length(plus_half_defs));
-            cmap3 = cmap3(randperm(size(cmap3, 1)), :);
-            figure(tiledfig)
-            nexttile, imshow(I);
-            hold on
-            for i = 1:length(plus_half_defs)
-                highlight(plot(connectivity_graph,'XData',cells_xc,'YData',cells_yc,'EdgeColor','#0072BD','NodeColor','#0072BD'),'Edges',contact_edgecycles{plus_half_defs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
-            end
-            hold off
-            title("Defects: +1/2")
-            % defect centers plot
-            figure(singlefig)
-            hold on
-            plot(plushalf_x,plushalf_y,'Marker','o','MarkerSize',10,'MarkerFaceColor','#0072BD','MarkerEdgeColor','#0072BD','LineStyle','none')
-            hold off
-        end
-    end
-
-    if minushalfdefs_flag > 0
-        minus_half_defs = find(topologicalCharges==-0.5);
-        minushalf_x = mean(cells_xc(vertcat(contact_cycles{minus_half_defs}))');
-        minushalf_y = mean(cells_yc(vertcat(contact_cycles{minus_half_defs}))');
-        if minushalfdefs_flag > 1
-            % defect cycles plot
-            cmap3 = parula(length(minus_half_defs));
-            cmap3 = cmap3(randperm(size(cmap3, 1)), :);
-            figure(tiledfig)
-            nexttile, imshow(I);
-            hold on
-            for i = 1:length(minus_half_defs)
-                highlight(plot(connectivity_graph,'XData',cells_xc,'YData',cells_yc,'EdgeColor','#0072BD','NodeColor','#0072BD'),'Edges',contact_edgecycles{minus_half_defs(i)},'EdgeColor',cmap3(i,:),'LineWidth',1.5,'NodeColor',cmap3(i,:),'MarkerSize',6)
-            end
-            hold off
-            title("Defects: -1/2")
-            % defect centers plot
-            figure(singlefig)
-            hold on
-            plot(minushalf_x,minushalf_y,'Marker','o','MarkerSize',10,'MarkerFaceColor','#7E2F8E','MarkerEdgeColor','#7E2F8E','LineStyle','none')
-            hold off
-        end
-    end
-
-    if (plusonedefs_flag > 2 || minusonedefs_flag > 2 || plushalfdefs_flag > 2 || minushalfdefs_flag > 2)
-        saveas(tiledfig,fullfile(analysis_foldername, sprintf('00%d-defect_cycles.tif',j)));
-        saveas(singlefig,fullfile(analysis_foldername, sprintf('00%d-defect_centers.tif',j)));
-    end
-
-end
 
 %% ellipse visualization thanks to its parametric equation superimposed to original image
 figure;
@@ -310,17 +169,6 @@ hold off
 grid on
 xticks(0:20:500)
 yticks(0:20:500)
-
-%% Saving pictures
-name_picture=sprintf('00%d-Colors.tif',j);
-saveas(gcf,name_picture);
-
-%% calculations Shape Index
-table.SI = 4 *pi* table.Area ./ (table.Perimeter.^2);
-table.SIjamming = table.Perimeter./sqrt(table.Area);
-
-table_name=sprintf('00%d-CY5.csv',j);
-% writetable(table,table_name);
 
 clear *_flag
 % warning('off')

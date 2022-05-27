@@ -1,5 +1,8 @@
-function [I, fig] = image2binary(image2binary_flag, origin_filename, analysis_foldername, cell_color, j)
-    fig = 0;
+function [I, fig] = image2binary(image2binary_flag, origin_filename, cell_color)
+
+global I analysis_foldername j
+
+    fig = nan;
     if image2binary_flag > 0
         I=imbinarize(imread(origin_filename));
         switch lower(cell_color)

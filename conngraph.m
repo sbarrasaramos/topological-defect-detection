@@ -1,5 +1,8 @@
-function [connectivity_graph, fig] = conngraph(graph_flag, cc, labeled_cells, dilate_strel, cell_data, minimum_contact_length, I, j)
-    fig = 0;
+function [connectivity_graph, cells_xc, cells_yc,fig] = conngraph(graph_flag, cc, labeled_cells, dilate_strel, cell_data, minimum_contact_length)
+
+global I analysis_foldername j
+
+    fig = nan;
     if graph_flag > 0
         dilated_labeled_cells = imdilate(labeled_cells,dilate_strel);
     %     cell_edges = imLabelEdges(dilated_labeled_cells);

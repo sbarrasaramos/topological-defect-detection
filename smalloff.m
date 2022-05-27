@@ -1,5 +1,8 @@
-function [I, fig] = smalloff(smalloff_flag, I, analysis_foldername, j) 
-    fig = 0;
+function [I, fig] = smalloff(smalloff_flag) 
+
+global I analysis_foldername j
+
+    fig = nan;
     if smalloff_flag > 0
         cell_sizes = regionprops(I, 'Area');
         max_cell_size = max([cell_sizes.Area]);

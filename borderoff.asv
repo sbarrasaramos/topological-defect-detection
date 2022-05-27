@@ -1,8 +1,7 @@
 function [I, fig] = borderoff(borderoff_flag) 
 
-global I analysis_foldername j
 
-    fig = nan;
+    fig = 0;
     if borderoff_flag > 0
         I = imclearborder(I);
         if borderoff_flag > 1

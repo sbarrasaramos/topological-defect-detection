@@ -1,5 +1,8 @@
-function [cell_data, fig] = celldata(celldata_flag, micrometers, cc, labeled_cells, j)
-    fig = 0;
+function [cell_data, fig] = celldata(celldata_flag, micrometers, cc, labeled_cells)
+
+global I analysis_foldername j
+
+    fig = nan;
     if celldata_flag > 0
         cell_data = regionprops(cc,{...
             'Area',...
